@@ -11,6 +11,7 @@ class VideoPlayer:
     def __init__(self, root, video_path):
         self.root = root
         self.root.title("Video Player")
+        self.max_height = 800  # Maximum height of the video player
 
         self.video_path = video_path
 
@@ -33,6 +34,10 @@ class VideoPlayer:
         self.x_min, self.x_max = 0, 0
         self.y_min, self.y_max = 0, 0
 
+        if self.video_height > self.max_height:
+            self.video_width = int(self.video_width * (self.max_height / self.video_height))
+            self.video_height = self.max_height
+
         self.create_widgets()
 
     def create_widgets(self):
@@ -45,13 +50,13 @@ class VideoPlayer:
         self.btn_play = tk.Button(self.root, text="Play/Pause", command=self.play_pause)
         self.btn_play.pack(side=tk.LEFT)
 
+        self.btn_save = tk.Button(self.root, text="Save Image", command=self.save_image)
+        self.btn_save.pack(side=tk.LEFT)
+
         self.scale = tk.Scale(self.root, from_=0, to=self.total_frames, orient=tk.HORIZONTAL)
         self.scale.pack(fill=tk.X)
 
         self.scale.bind("<ButtonRelease-1>", self.set_position)  # Update on slider release
-
-        self.btn_save = tk.Button(self.root, text="Save Image", command=self.save_image)
-        self.btn_save.pack(side=tk.LEFT)
 
         self.update()
 
@@ -89,10 +94,10 @@ class VideoPlayer:
                     self.y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0])
                     self.y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0])
 
-                    self.x_min -= 30
+                    self.x_min -= 50
                     self.y_min -= 30
-                    self.x_max += 30
-                    self.y_max += 45
+                    self.x_max += 50
+                    self.y_max += 60
 
                     self.mp_drawing.draw_landmarks(frame, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
                     cv2.rectangle(frame, (self.x_min, self.y_min), (self.x_max, self.y_max), (0, 255, 0), 2)
@@ -118,6 +123,9 @@ class VideoPlayer:
                             imgWhite[hGap:hCal + hGap, :] = imgResize
 
                         imgWhite = cv2.cvtColor(imgWhite, cv2.COLOR_BGR2RGB)
+                        cv2.imshow("ImageWhite", imgWhite)
+
+                    self.imgWhite = imgWhite  # Store imgWhite in the class for later use
 
                 cv2.putText(frame, f'FPS: {int(fps)}', (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
@@ -141,44 +149,25 @@ class VideoPlayer:
         self.update()
 
     def save_image(self):
-        file_path = 'data\Phase1'  # Replace with your desired file path
-        frame_filename = os.path.join(file_path, f'Phase1.jpg')
+        directory = "data/Phase1"
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
-        bounding_box_content = self.frame[self.y_min:self.y_max, self.x_min:self.x_max]
-        imgWhite = np.ones((self.imgSize, self.imgSize, 3), np.uint8) * 255
+        base_name = "Phase1.jpg"
+        file_name, file_extension = os.path.splitext(base_name)
+        file_path = os.path.join(directory, base_name)
+        count = 1
 
-        if bounding_box_content.size > 0:
-            content_height, content_width, _ = bounding_box_content.shape
-            aspect_ratio = content_height / content_width
+        while os.path.exists(file_path):
+            file_path = os.path.join(directory, f"{file_name}_{count}{file_extension}")
+            count += 1
 
-            if aspect_ratio > 1:
-                k = self.imgSize / content_height
-                wCal = math.ceil(k * content_width)
-                imgResize = cv2.resize(bounding_box_content, (wCal, self.imgSize))
-                wGap = math.ceil((500 - wCal) / 2)
-                imgWhite[:, wGap:wCal + wGap] = imgResize
-            else:
-                k = self.imgSize / content_width
-                hCal = math.ceil(k * content_height)
-                imgResize = cv2.resize(bounding_box_content, (self.imgSize, hCal))
-                hGap = math.ceil((500 - hCal) / 2)
-                imgWhite[hGap:hCal + hGap, :] = imgResize
-
-            imgWhite = cv2.cvtColor(imgWhite, cv2.COLOR_RGB2BGR)
-            if os.path.isfile(frame_filename):
-                index = 1
-                while os.path.isfile(frame_filename):
-                    frame_filename = os.path.join(file_path, f'Phase1_{index}.jpg')
-                    index += 1
-
-            cv2.imwrite(frame_filename, imgWhite[:, :, ::-1])
-            print(f"Image saved to {file_path}")
-        else:
-            print("No content in the bounding box to save.")
+        cv2.imwrite(file_path, self.imgWhite)
+        print(f"Image saved to {file_path}")
 
 def main():
     root = tk.Tk()
-    video_path = 'videos/Video.mp4'  # Replace with your video file path
+    video_path = 'videos/vid1.mp4'  # Replace with your video file path
     app = VideoPlayer(root, video_path)
     root.mainloop()
 

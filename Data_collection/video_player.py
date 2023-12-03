@@ -167,7 +167,7 @@ class VideoPlayer:
 
 def main():
     root = tk.Tk()
-    video_path = 'videos/vid1.mp4'  # Replace with your video file path
+    video_path = 'videos/vid2.mp4'  # Replace with your video file path
     app = VideoPlayer(root, video_path)
     root.mainloop()
 

@@ -149,7 +149,7 @@ class VideoPlayer:
         self.update()
 
     def save_image(self):
-        directory = "data/Phase1"
+        directory = "Data_collection/data/Phase1"
         if not os.path.exists(directory):
             os.makedirs(directory)
 
@@ -167,11 +167,7 @@ class VideoPlayer:
 
 def main():
     root = tk.Tk()
-    data_collection_folder = 'Data_collection'
-    video_folder = 'videos'
-    video_filename = 'vid1.mp4'
-
-    video_path = os.path.join(data_collection_folder, video_folder, video_filename)  # Replace with your video file path
+    video_path = 'Data_collection/videos/video.mp4' # Replace with your video file path
     app = VideoPlayer(root, video_path)
     root.mainloop()
 

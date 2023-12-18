@@ -95,7 +95,7 @@ class VideoPlayer:
                     self.y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0])
 
                     self.x_min -= 50
-                    self.y_min -= 30
+                    self.y_min -= 70
                     self.x_max += 50
                     self.y_max += 60
 
@@ -123,7 +123,6 @@ class VideoPlayer:
                             imgWhite[hGap:hCal + hGap, :] = imgResize
 
                         imgWhite = cv2.cvtColor(imgWhite, cv2.COLOR_BGR2RGB)
-                        cv2.imshow("ImageWhite", imgWhite)
 
                     self.imgWhite = imgWhite  # Store imgWhite in the class for later use
 
@@ -167,7 +166,7 @@ class VideoPlayer:
 
 def main():
     root = tk.Tk()
-    video_path = 'Data_collection/videos/video.mp4' # Replace with your video file path
+    video_path = 'Data_collection/videos/vid1.mp4' # Replace with your video file path
     app = VideoPlayer(root, video_path)
     root.mainloop()
 

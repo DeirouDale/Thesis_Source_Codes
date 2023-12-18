@@ -10,7 +10,6 @@ import numpy as np
 import math
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-import threading
 
 ctk.set_appearance_mode("dark")
 
@@ -149,7 +148,6 @@ class App(ctk.CTk):
         self.button_frame_button_4 = ctk.CTkButton(self.button_frame, text="Finish Recording", width= 300, font=('Montserrat', 16 ), border_spacing = 7, cursor= 'hand2', state = 'disabled', command = self.stop_record_event)
         self.button_frame_button_6 = ctk.CTkButton(self.button_frame, text="Exit", width= 70, font=('Montserrat', 16 ), border_spacing = 7, cursor= 'hand2', command = self.exit_event)
         #Assessment buttons
-        self.button_frame_button_7 = ctk.CTkButton(self.button_frame, text="Loading", width= 70, font=('Montserrat', 16 ), border_spacing = 7, cursor= 'hand2')
   
         # create second frame
         self.second_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -344,11 +342,6 @@ class App(ctk.CTk):
         return self.prediction
 
     def analyze_video(self):
-        video_filename = "Video.mp4"
-        self.cap = cv2.VideoCapture(video_filename)
-
-        self.mp_pose_instance = mp.solutions.pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-    
         while self.cap.isOpened():
             ret, frame = self.cap.read()
 
@@ -418,26 +411,43 @@ class App(ctk.CTk):
                 key = cv2.waitKey(70) & 0xFF
                 if key == ord('q'):
                     break
-        cv2.destroyAllWindows()
 
-    def show_loading_screen(self):
-        self.button_frame_button_7.grid(row=1, column=0, padx=10, pady=20)
+                # image = Image.fromarray(frame_rgb)
+                # photo = ImageTk.PhotoImage(image=image)
+
+                # if hasattr(self, "video_label"):
+                #     self.video_label.configure(image=photo)
+                #     self.video_label.image = photo
+                # else:
+                #     self.video_label = tk.Label(self.cameraframe, image=photo)
+                #     self.video_label.configure(borderwidth=0, highlightthickness=0)
+                #     self.video_label.pack()
+
+                # self.update_idletasks()
+                # self.wait(100)
 
     def stop_record_event(self):
-        self.cameraframe.grid_forget()
-
+        self.button_frame_button_4.configure(state='disabled')
         if self.out:
             self.out.release()
+
+        self.cameraframe.grid(row=2, column=0, padx=60, pady=10, sticky='nswe')
 
         # Remove the initial buttons
         self.button_frame_button_3.grid_forget()
         self.button_frame_button_4.grid_forget()
 
-        # Show the loading screen
-        self.show_loading_screen()
+        # Show the recording buttons
+        self.button_frame_button_6.grid(row=1, column=3, padx=10, pady=20)
 
-        # Start video analysis in a separate thread
-        threading.Thread(target=self.analyze_video).start()
+        video_filename = "Video.mp4"
+        self.cap = cv2.VideoCapture(video_filename)
+
+        self.mp_pose_instance = mp.solutions.pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+        # Start a separate thread to continuously show video frames and analyze
+        # video_analysis_thread = Thread(target=self.analyze_video)
+        # video_analysis_thread.start()
+        self.analyze_video()
 
 
 if __name__ == "__main__":

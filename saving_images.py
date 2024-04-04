@@ -2,10 +2,10 @@ import cv2
 import mediapipe as mp
 import os
 import numpy as np
-import math  # Add this line to import the math module
+import math
 from PIL import Image
 
-vid_name = 'vid5'
+vid_name = 'vid4'
 # Path to the video file
 video_path = f'Data_collection/videos/{vid_name}.mp4'
 
@@ -88,15 +88,19 @@ for frame_number in range(1, total_frames + 1):
                     wCal = math.ceil(k * content_width)
                     imgResize = cv2.resize(bounding_box_content, (wCal, 500))
                     wGap = math.ceil((500 - wCal) / 2)
-                    imgWhite[:, wGap:wCal + wGap] = imgResize
+                    if imgResize.shape[1] < 500:
+                        imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                    else:
+                        imgWhite[:, :] = imgResize[:, :500]
                 else:
                     k = 500 / content_width
                     hCal = math.ceil(k * content_height)
                     imgResize = cv2.resize(bounding_box_content, (500, hCal))
                     hGap = math.ceil((500 - hCal) / 2)
-                    imgWhite[hGap:hCal + hGap, :] = imgResize
-
-                #imgWhite = cv2.cvtColor(imgWhite, cv2.COLOR_BGR2RGB)
+                    if imgResize.shape[0] < 500:
+                        imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                    else:
+                        imgWhite[:, :] = imgResize[:500, :]
 
                 # Save the frame with landmarks and bounding box to the output folder
                 file_name = f"{vid_name}_{frame_number}.jpg"

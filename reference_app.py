@@ -7,6 +7,7 @@ import os
 import numpy as np
 import math 
 from tensorflow.keras.models import load_model
+import threading
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -88,90 +89,12 @@ class Title(ttk.Frame):
         #widgets
         label_logo = ttk.Label(title_frame, text='LOGO', font=('Arial', 25), background='orange', foreground='white')
         label_title = ttk.Label(title_frame, text='Gati Assessment Device', font=('Arial', 25), background='orange', foreground='white')
-        enter_btn = ttk.Button(btn_frame, text='ENTER', command=lambda: self.master.change_frame(self, LogIn))
+        enter_btn = ttk.Button(btn_frame, text='ENTER', command=lambda: self.master.change_frame(self, Again))
 
         #layout
         label_logo.grid(row=0, column=0)
         label_title.grid(row=1, column=0)
         enter_btn.pack(fill="both", expand=True)
-
-class LogIn(ttk.Frame):
-    def __init__(self, parent, style):
-        super().__init__(parent)
-        self.style = style
-
-        self.login_frame = tk.Frame(self)
-        self.login_frame.pack()
-        
-        self.username_label = tk.Label(self.login_frame, text="Username: ")
-        self.username_label.grid(row=0, column=0, padx=5, pady=5)
-        self.username_entry = tk.Entry(self.login_frame)
-        self.username_entry.grid(row=0, column=1, padx=5, pady=5)
-
-        self.password_label = tk.Label(self.login_frame, text="Password:")
-        self.password_label.grid(row=1, column=0, padx=5, pady=5)
-        self.password_entry = tk.Entry(self.login_frame, show="*")
-        self.password_entry.grid(row=1, column=1, padx=5, pady=5)
-
-        self.login_button = tk.Button(self.login_frame, text="Login", command=self.login)
-        self.login_button.grid(row=2, column=0, columnspan=2, pady=10)
-
-    def login(self):
-        username = self.username_entry.get()
-        password = self.password_entry.get()
-
-        # Dummy authentication, replace with your own logic
-        if username == "admin" and password == "password":
-            self.master.change_frame(self, Menu)
-        else:
-            messagebox.showerror("Login Failed", "Invalid username or password")
-
-class Menu(ttk.Frame):
-    def __init__(self, parent, style):
-        super().__init__(parent)
-        self.style = style
-        
-        self.columnconfigure((0,2), weight=1)
-        self.columnconfigure(1, minsize=5)
-        self.rowconfigure(0, weight=1)
-
-        #frames
-        self.assessment_frame = ttk.Frame(self)
-        border_line = ttk.Label(self, background='black')
-        self.monitor_frame = ttk.Frame(self)
-        
-        self.assessment_frame.grid(row=0, column=0, sticky='nsew')
-        border_line.grid(row=0, column=1, sticky='nsew')
-        self.monitor_frame.grid(row=0, column=2, sticky='nsew')
-
-        #widgets
-        self.assessment_widgets()
-        self.monitor_widgets()
-
-    def assessment_widgets(self):
-        
-        self.assessment_frame.columnconfigure(0, weight=1)
-        self.assessment_frame.rowconfigure(0, weight=2)
-        self.assessment_frame.rowconfigure(1, weight=1)
-
-        #widget
-        assessment_logo = ttk.Label(self.assessment_frame, text='ASSESSMENT LOGO', font=('Arial', 18))
-        assessment_btn = ttk.Button(self.assessment_frame, text='Start Assessment', command=lambda: self.master.change_frame(self, Start_Assessment))
-        #layout
-        assessment_logo.grid(row=0, column=0)
-        assessment_btn.grid(row=1, column=0)
-
-    def monitor_widgets(self):
-        self.monitor_frame.columnconfigure(0, weight=1)
-        self.monitor_frame.rowconfigure(0, weight=2)
-        self.monitor_frame.rowconfigure(1, weight=1)
-        
-        #widget
-        monitor_logo = ttk.Label(self.monitor_frame, text='ASSESSMENT LOGO', font=('Arial', 18))
-        monitor_btn = ttk.Button(self.monitor_frame, text='Monitor Data', command=lambda: print('button pressed'))
-        #layout
-        monitor_logo.grid(row=0, column=0)
-        monitor_btn.grid(row=1, column=0)
 
 class Start_Assessment(ttk.Frame):
     def __init__(self, parent, style):
@@ -184,7 +107,6 @@ class Start_Assessment(ttk.Frame):
         self.rowconfigure(2, weight=1)
 
         #frames
-        
         self.icon_frame = ttk.Frame(self)
         self.patient_list_frame = ttk.Frame(self)
 
@@ -215,21 +137,16 @@ class Start_Assessment(ttk.Frame):
 
         patient_label_entry = ttk.Label(self.patient_list_frame, text='Patient Number:', font=('Arial', 24))
         self.patient_entry = ttk.Entry(self.patient_list_frame, font=('Arial', 24))
-        patient_refresh = ttk.Button(self.patient_list_frame, text='refresh', command=self.refresh_messagebox)
 
         patient_label_entry.grid(row=0, column=0)
         self.patient_entry.grid(row=0, column=1)
-        patient_refresh.grid(row=0, column=2)
     
-    def refresh_messagebox(self):
-        messagebox.showinfo("Application Database Message", "Patient database has been synced and refreshed!")
 
     def patient_database(self):
-        patient_nums = ['24-00001', '24-00002', '24-00003', '24-00004', '24-00005']
+        patient_nums = ['24-00001', '24-00002', '24-00003', '24-00004', '24-00005', '']
         entry_num = self.patient_entry.get()
         if entry_num in patient_nums:
             self.master.current_patient = entry_num
-            messagebox.showinfo("Application Database Message", "Patient is in device list proceed")
             self.master.change_frame(self, Side_Cam)
         else:
             messagebox.showinfo("Application Database Message", "Patient not in device list, refresh or check website")
@@ -241,14 +158,15 @@ class Side_Cam(ttk.Frame):
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=8)
+        self.rowconfigure(1, weight=10)
         self.rowconfigure(2, weight=1)
 
         self.assessment_state = 0
         self.assessment_state_text = 'None'
         
-
         self.cap = cv2.VideoCapture(0)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         self.recording = False
         self.out = None
 
@@ -257,7 +175,6 @@ class Side_Cam(ttk.Frame):
         self.webcam_frame = ttk.Frame(self)
         self.choose_side_btn1 = ttk.Frame(self)
         
-
         self.top_frame.grid(row=0, column=0, sticky='nsew')
         self.webcam_frame.grid(row=1, column=0, sticky='nsew')
         self.choose_side_btn1.grid(row=2, column=0, sticky='nsew')
@@ -350,7 +267,7 @@ class Side_Cam(ttk.Frame):
 
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
-            self.out = cv2.VideoWriter(output_filename, fourcc, 20, (640, 480))
+            self.out = cv2.VideoWriter(output_filename, fourcc, 20, (1280, 720))
             
         else:
             self.recording = False
@@ -390,13 +307,12 @@ class Loading_screen(ttk.Frame):
         self.loading_screen = ttk.Frame(self)
         self.loading_screen.pack(fill='both', expand= True)
 
-        loading_label = ttk.Label(self.loading_screen, text="currently analyzing video/s", anchor='center', justify='center', font=('Arial', 24)) 
-        loading_label.pack(fill='both', expand=True)
+        self.percent_label = ttk.Label(self.loading_screen, text="", anchor='center', justify='center', font=('Arial', 24)) 
+        self.percent_label.pack(fill='both', expand=True)
 
-        self.after(100, self.video_to_image)
+        # Start the video_to_image method in a separate thread
+        threading.Thread(target=self.video_to_image).start()
 
-        
-        
     def video_to_image(self):
         sides = ['Right', 'Left']
 
@@ -457,6 +373,7 @@ class Loading_screen(ttk.Frame):
 
                         imgWhite = np.ones((500, 500, 3), np.uint8) * 255
 
+                        # Resize and adjust the bounding box content
                         if bounding_box_content.size > 0:
                             content_height, content_width, _ = bounding_box_content.shape
                             aspect_ratio = content_height / content_width
@@ -466,172 +383,238 @@ class Loading_screen(ttk.Frame):
                                 wCal = math.ceil(k * content_width)
                                 imgResize = cv2.resize(bounding_box_content, (wCal, 500))
                                 wGap = math.ceil((500 - wCal) / 2)
-                                imgWhite[:, wGap:wCal + wGap] = imgResize
+                                if imgResize.shape[1] < 500:
+                                    imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                                else:
+                                    imgWhite[:, :] = imgResize[:, :500]
                             else:
                                 k = 500 / content_width
                                 hCal = math.ceil(k * content_height)
                                 imgResize = cv2.resize(bounding_box_content, (500, hCal))
                                 hGap = math.ceil((500 - hCal) / 2)
-                                imgWhite[hGap:hCal + hGap, :] = imgResize
+                                if imgResize.shape[0] < 500:
+                                    imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                                else:
+                                    imgWhite[:, :] = imgResize[:500, :]
+
 
                             file_name = f"{frame_number}.jpg"
                             file_path = os.path.join(output_folder, file_name)
                             cv2.imwrite(file_path, imgWhite)
-                            print(f"Landmarks detected in frame {frame_number}.")
-                else:
-                    print(f"No landmarks detected in frame {frame_number}.")
-
+                
+                current_percent = int(round((frame_number / total_frames) * 100))
+                self.percent_label.config(text=f"{side} preprocessing: {current_percent}%")
+                
             cap.release()
             cv2.destroyAllWindows()
 
+        # After the video processing is done, change the frame to Done_Analyzing
         self.master.change_frame(self, Done_Analyzing)
-            
-    def classify_images(self):
-        pass
-        #create a list for left and right samples. Dont include first 15 frames and last 15 frames since these are most likely dodgy images
     
 class Done_Analyzing(ttk.Frame):
-     def __init__(self, parent, style):
-        super().__init__(parent)
-        self.style = style
-
-        self.done_analyzing_screen = ttk.Frame(self)
-        self.done_analyzing_screen.pack(fill='both', expand=True)
-
-        analyzed_label = ttk.Label(self.done_analyzing_screen, text="Done Analyzing", anchor='center', justify='center', font=('Arial', 24)) 
-        next_btn = ttk.Button(self.done_analyzing_screen, text="Next", command=lambda: self.master.change_frame(self, Show_table))
-
-        analyzed_label.pack(fill='both', expand=True)
-        next_btn.pack(fill='both', expand=True)
-
-class Show_table(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
         self.style = style
 
-        # Define class names
-        self.class_names = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4', 'Phase 5', 'Phase 6', 'Phase 7', 'Phase 8']
+        #Frames
+        self.analyzing_frame = ttk.Frame(self)
+        self.analyzing_frame.pack(fill='both', expand= True)
 
+        self.percent_label = ttk.Label(self.analyzing_frame, text="", anchor='center', justify='center', font=('Arial', 24)) 
+        self.percent_label.pack(fill='both', expand=True)
+
+        # Start the video_to_image method in a separate thread
+        threading.Thread(target=self.process_images).start()
+
+    def process_images(self):
         # Load models for Left and Right
-        left_model = self.load_model_for_side('Left')
-        right_model = self.load_model_for_side('Right')
+        self.left_model = self.load_model_for_side('Left')
+        self.right_model = self.load_model_for_side('Right')
 
         # Process images for Left and Right
-        left_phase_frames = self.process_images_for_side('Left', left_model)
-        right_phase_frames = self.process_images_for_side('Right', right_model)
+        self.left_phase_frames = self.process_images_for_side('Left', self.left_model)
+        self.right_phase_frames = self.process_images_for_side('Right', self.right_model)
 
-        # Rename images from Right side to avoid overwriting Left side images
-        right_phase_frames_suffix = {}
-        for phase_num, phase_data in right_phase_frames.items():
-            right_phase_frames_suffix[phase_num] = {}
-            for frame_num, frame_data in phase_data.items():
-                if frame_num in left_phase_frames[phase_num]:
-                    # Rename Right image with a suffix
-                    frame_name = frame_data['frame_name']
-                    frame_name_suffix = frame_name + '_right'
-                    frame_data['frame_name'] = frame_name_suffix
-                    right_phase_frames_suffix[phase_num][frame_num] = frame_data
-                else:
-                    right_phase_frames_suffix[phase_num][frame_num] = frame_data
+        self.table_frame()
 
-        # Combine Left and Right phase frames
-        combined_phase_frames = {}
-        for phase_num in range(1, 9):
-            combined_phase_frames[phase_num] = {}
-            combined_phase_frames[phase_num].update(left_phase_frames[phase_num])
-            combined_phase_frames[phase_num].update(right_phase_frames_suffix[phase_num])
+    def table_frame(self):
+        self.analyzing_frame.pack_forget()
 
-        # Create frame for the table
-        frame = ttk.Frame(self)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Create a Combobox to select the side (Left or Right)
+        self.side_var = tk.StringVar()
+        self.side_var.set('Left')  # Default value
+        self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Left', 'Right'], state="readonly")
+        self.side_selector.pack()
 
-        # Create a canvas for the table
-        canvas = tk.Canvas(frame)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Create a Combobox to select phase number
+        self.phase_number_var = tk.StringVar()
+        self.phase_number_var.set('1')  # Default value
+        self.phase_selector = ttk.Combobox(self, textvariable=self.phase_number_var, values=[str(i) for i in range(1, 9)], state="readonly")
+        self.phase_selector.pack()
 
-        # Add a scrollbar to the canvas
-        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Button to populate the table
+        self.populate_button = tk.Button(self, text="Populate Table", command=self.update_table)
+        self.populate_button.pack()
 
-        # Configure canvas scrolling
-        canvas.configure(yscrollcommand=scrollbar.set)
+        # Button to send data
+        self.send_button = tk.Button(self, text="Send", command=self.send_data)
+        self.send_button.pack()
+
+        # Create a canvas and attach a scrollbar to it
+        self.canvas = tk.Canvas(self)
+        self.canvas.pack(side=tk.LEFT, fill='both', expand=True)
+
+        self.scrollbar = ttk.Scrollbar(self, orient='vertical', command=self.canvas.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill='y')
+
+        # Configure the canvas to utilize the scrollbar
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Create a frame to contain all widgets
+        self.scrollable_frame = tk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor='center', width=1920)
+
+        # Update scroll region when the size of the frame changes
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+
+        # Make the canvas scrollable with the mouse wheel
+        self.canvas.bind('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
+
+        # Create a frame for the table-like structure
+        self.table_frame = tk.Frame(self.scrollable_frame)
+        self.table_frame.pack()
+
+    def send_data(self):
+        messagebox.showinfo("Sent data", "Data Sent to Website!")
+        self.master.change_frame(self, Again)
         
-        # Create another frame inside the canvas to hold the table
-        table_frame = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=table_frame, anchor="nw")
-
-        # Populate the combined table
-        self.populate_table(combined_phase_frames, table_frame)
-
     def load_model_for_side(self, side):
         return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
 
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'
+        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
 
-        image_files = os.listdir(test_data_dir)
+        # Exclude the first 10 and last 10 frames
+        image_files = image_files[10:-10]
 
-        # Create an empty dictionary to store frame numbers for each phase, along with their frame names and images
         phase_frames = {phase_num: {} for phase_num in range(1, 9)}
 
-        for image_file in image_files:
+        for index, image_file in enumerate(image_files):
             if image_file.endswith('.jpg'):
-                frame_num = int(os.path.splitext(image_file)[0])  # Extract frame number from the image file name
-
+                frame_num = int(os.path.splitext(image_file)[0])
                 image_path = os.path.join(test_data_dir, image_file)
-
                 img = cv2.imread(image_path)
-
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
                 resize = cv2.resize(img_rgb, (256, 256))
-
                 normalized_img = resize / 255.0
-
                 yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
-
                 predicted_class = int(np.argmax(yhat_single, axis=1))
-
-                # Add the frame information to the corresponding phase dictionary
-                phase_frames[predicted_class + 1][frame_num] = {'frame_name': f'frame {frame_num}', 'image_path': image_path, 'phase': predicted_class}
-
+                phase_frames[predicted_class + 1][frame_num] = {
+                    'frame_name': f'frame {frame_num}',
+                    'image_path': image_path,
+                    'rom_h': 'sample',
+                    'rom_k': 'sample',
+                    'rom_a': 'sample',
+                    'insole': 'sample',
+                }
+                current_percent = int(round((index / len(image_files)) * 100))
+                self.percent_label.config(text=f"{side} analyzing data: {current_percent}%")
         return phase_frames
 
-    def show_image(self, image_path):
-        # Open the image file
-        image = Image.open(image_path)
-        # Resize image for display
-        image = image.resize((200, 200))
-        # Convert Image object to Tkinter PhotoImage object
-        photo = ImageTk.PhotoImage(image)
+    def update_table(self):
+        current_side = self.side_var.get()
+        phase_number = int(self.phase_number_var.get())
+
+        if current_side == 'Left':
+            self.populate_table_frame(self.table_frame, self.left_phase_frames, phase_number)
+        else:
+            self.populate_table_frame(self.table_frame, self.right_phase_frames, phase_number)
+
+    def populate_table_frame(self, table_frame, phase_frames, phase_number):
+        # Clear existing widgets from table_frame
+        for widget in table_frame.winfo_children():
+            widget.destroy()
+
+        # Define headings
+        headings = ['Frame Image', 'ROM Hips', 'ROM Knees', 'ROM Ankle', 'Insole']
+
+        # Create labels for headings with font size 20
+        for col, heading in enumerate(headings):
+            heading_label = tk.Label(table_frame, text=heading, font=('Helvetica', 24, 'bold'),
+                                     borderwidth=1, relief='solid')
+            heading_label.grid(row=0, column=col, sticky="nsew")
+
+        # Iterate over phase_frames and populate the table-like structure
+        for row, (frame_num, frame_info) in enumerate(phase_frames[phase_number].items(), start=1):
+            image_path = frame_info['image_path']
+            rom_h = frame_info['rom_h']
+            rom_k = frame_info['rom_k']
+            rom_a = frame_info['rom_a']
+            insole = frame_info['insole']
+
+            # Display image
+            img = Image.open(image_path)
+            img.thumbnail((175, 175))  # Resize image if necessary
+            img = ImageTk.PhotoImage(img)
+            img_label = tk.Label(table_frame, image=img, borderwidth=1, relief='solid')
+            img_label.image = img  # Keep reference to avoid garbage collection
+            img_label.grid(row=row, column=0, sticky="nsew")
+
+            # Display other information with font size 20
+            tk.Label(table_frame, text=rom_h, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=1, sticky="nsew")
+            tk.Label(table_frame, text=rom_k, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=2, sticky="nsew")
+            tk.Label(table_frame, text=rom_a, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=3, sticky="nsew")
+            tk.Label(table_frame, text=insole, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=4, sticky="nsew")
+
+class Again(ttk.Frame):
+    def __init__(self, parent, style):
+        super().__init__(parent)
+        self.style = style
         
-        return photo
+        self.columnconfigure((0,2), weight=1)
+        self.columnconfigure(1, minsize=5)
+        self.rowconfigure(0, weight=1)
 
-    def populate_table(self, data, parent):
-        # Create labels for each phase
-        for col, phase_name in enumerate(self.class_names):
-            ttk.Label(parent, text=phase_name).grid(row=0, column=col, padx=10)
+        #frames
+        self.assessment_frame = ttk.Frame(self)
+        border_line = ttk.Label(self, background='black')
+        self.end_frame = ttk.Frame(self)
+        
+        self.assessment_frame.grid(row=0, column=0, sticky='nsew')
+        border_line.grid(row=0, column=1, sticky='nsew')
+        self.end_frame.grid(row=0, column=2, sticky='nsew')
 
-        # Initialize counters for each phase
-        phase_counters = {phase_num: 1 for phase_num in range(1, 9)}
+        #widgets
+        self.assessment_widgets()
+        self.end_widgets()
 
-        # Populate the table with frames for each phase
-        for phase_num, phase_data in data.items():
-            for frame_num, frame_data in phase_data.items():
-                frame_name = frame_data['frame_name']
-                image_path = frame_data['image_path']
-                # Load image and convert to Tkinter PhotoImage
-                photo = self.show_image(image_path)
-                # Create label to display the image
-                label = tk.Label(parent, image=photo, borderwidth=1, relief="solid")
-                label.photo = photo  # Keep reference to prevent garbage collection
-                label.grid(row=phase_counters[phase_num], column=phase_num - 1, padx=10, pady=10)
-                # Create label to display frame name
-                ttk.Label(parent, text=frame_name, borderwidth=1, relief="solid").grid(row=phase_counters[phase_num] + 1, column=phase_num - 1, padx=10)
-                # Increment counter for the current phase
-                phase_counters[phase_num] += 2  # Increment by 2 to leave space for frame name
+    def assessment_widgets(self):
+        
+        self.assessment_frame.columnconfigure(0, weight=1)
+        self.assessment_frame.rowconfigure(0, weight=2)
+        self.assessment_frame.rowconfigure(1, weight=1)
 
-# Example usage:
+        #widget
+        assessment_btn = ttk.Button(self.assessment_frame, text='Assess Again', command=lambda: self.master.change_frame(self, Start_Assessment))
+        #layout
+        assessment_btn.grid(row=0, column=0)
+
+    def end_widgets(self):
+        self.end_frame.columnconfigure(0, weight=1)
+        self.end_frame.rowconfigure(0, weight=2)
+        self.end_frame.rowconfigure(1, weight=1)
+        
+        #widget
+        end_btn = ttk.Button(self.end_frame, text='End Assessment', command=lambda: self.end_function())
+        #layout
+        end_btn.grid(row=0, column=0)
+
+    def end_function(self):
+        messagebox.showinfo("Clost Tab", "Thank you for using the application")
+        self.master.destroy()
+
 if __name__ == "__main__":
-    app = RefApp((850, 540))
+    app = RefApp((1920, 1080))
+    app.state('zoomed')
     app.mainloop()

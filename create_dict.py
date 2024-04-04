@@ -40,7 +40,11 @@ def process_images_for_side(side, model):
             predicted_class = int(np.argmax(yhat_single, axis=1))
 
             # Add the frame information to the corresponding phase dictionary
-            phase_frames[predicted_class + 1][frame_num] = {'frame_name': f'frame {frame_num}', 'image_path': image_path, 'phase': predicted_class}
+            phase_frames[predicted_class + 1][frame_num] = {
+                'frame_name': f'frame {frame_num}',
+                'image_path': image_path,
+                'phase': predicted_class
+                }
 
     return phase_frames
 

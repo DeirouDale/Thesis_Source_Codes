@@ -180,7 +180,8 @@ class Side_Cam(ttk.Frame):
         self.choose_side_btn1.grid(row=2, column=0, sticky='nsew')
 
         self.top_frame_widget()
-        self.camera_update()
+        self.camera_thread = threading.Thread(target=self.camera_update_thread, daemon=True)
+        self.camera_thread.start()
         self.choose_side_btn_widget()
 
     def top_frame_widget(self):
@@ -267,7 +268,7 @@ class Side_Cam(ttk.Frame):
 
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
-            self.out = cv2.VideoWriter(output_filename, fourcc, 20, (1280, 720))
+            self.out = cv2.VideoWriter(output_filename, fourcc, 30.0, (1280, 720))  # Original frame rate and size
             
         else:
             self.recording = False
@@ -280,20 +281,22 @@ class Side_Cam(ttk.Frame):
             else:
                 self.change_button(8)
             
-    def camera_update(self):
-        ret, frame = self.cap.read()
+    def camera_update_thread(self):
+        while True:
+            ret, frame = self.cap.read()
 
-        if ret:
-            photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
-            label = ttk.Label(self.webcam_frame, image=photo)
-            label.image = photo
-            label.grid(row=0, column=0, sticky='nsew')
-            label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+            if ret:
+                photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+                label = ttk.Label(self.webcam_frame, image=photo)
+                label.image = photo
+                label.grid(row=0, column=0, sticky='nsew')
+                label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-            if self.recording:
-                self.out.write(frame)  
-        
-        self.after(20, self.camera_update)
+                if self.recording:
+                    self.out.write(frame)  
+
+            self.webcam_frame.update_idletasks()
+            self.webcam_frame.update()
 
     def destroy(self):
         self.cap.release()  
@@ -305,9 +308,9 @@ class Loading_screen(ttk.Frame):
         self.style = style
 
         self.loading_screen = ttk.Frame(self)
-        self.loading_screen.pack(fill='both', expand= True)
+        self.loading_screen.pack(fill='both', expand=True)
 
-        self.percent_label = ttk.Label(self.loading_screen, text="", anchor='center', justify='center', font=('Arial', 24)) 
+        self.percent_label = ttk.Label(self.loading_screen, text="", anchor='center', justify='center', font=('Arial', 24))
         self.percent_label.pack(fill='both', expand=True)
 
         # Start the video_to_image method in a separate thread
@@ -326,18 +329,13 @@ class Loading_screen(ttk.Frame):
 
             cap = cv2.VideoCapture(video_path)
 
-            ret, frame = cap.read()
-
             if not cap.isOpened():
                 print("Error: Could not open the video file.")
                 exit()
-            
+
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
             for frame_number in range(1, total_frames + 1):
-
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number - 1)  
-
                 ret, frame = cap.read()
 
                 if not ret:
@@ -349,7 +347,6 @@ class Loading_screen(ttk.Frame):
                 results = pose.process(frame_rgb)
 
                 if results.pose_landmarks:
-
                     mp_drawing = mp.solutions.drawing_utils
                     mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
@@ -397,14 +394,14 @@ class Loading_screen(ttk.Frame):
                                 else:
                                     imgWhite[:, :] = imgResize[:500, :]
 
-
                             file_name = f"{frame_number}.jpg"
                             file_path = os.path.join(output_folder, file_name)
                             cv2.imwrite(file_path, imgWhite)
-                
+
                 current_percent = int(round((frame_number / total_frames) * 100))
                 self.percent_label.config(text=f"{side} preprocessing: {current_percent}%")
                 
+            # Release resources after processing each video
             cap.release()
             cv2.destroyAllWindows()
 
@@ -416,11 +413,11 @@ class Done_Analyzing(ttk.Frame):
         super().__init__(parent)
         self.style = style
 
-        #Frames
+        # Frames
         self.analyzing_frame = ttk.Frame(self)
-        self.analyzing_frame.pack(fill='both', expand= True)
+        self.analyzing_frame.pack(fill='both', expand=True)
 
-        self.percent_label = ttk.Label(self.analyzing_frame, text="", anchor='center', justify='center', font=('Arial', 24)) 
+        self.percent_label = ttk.Label(self.analyzing_frame, text="", anchor='center', justify='center', font=('Arial', 24))
         self.percent_label.pack(fill='both', expand=True)
 
         # Start the video_to_image method in a separate thread
@@ -436,6 +433,47 @@ class Done_Analyzing(ttk.Frame):
         self.right_phase_frames = self.process_images_for_side('Right', self.right_model)
 
         self.table_frame()
+
+    def load_model_for_side(self, side):
+        return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
+
+    def process_images_for_side(self, side, model):
+        test_data_dir = f'Data_process/{side}'
+        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
+
+        # Exclude the first 10 and last 10 frames
+        image_files = image_files[5:-5]
+
+        phase_frames = {phase_num: {} for phase_num in range(1, 9)}
+
+        total_files = len(image_files)
+        for index, image_file in enumerate(image_files):
+            if image_file.endswith('.jpg'):
+                frame_num = int(os.path.splitext(image_file)[0])
+                image_path = os.path.join(test_data_dir, image_file)
+                img = cv2.imread(image_path)
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                resize = cv2.resize(img_rgb, (256, 256))
+                normalized_img = resize / 255.0
+                yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
+                predicted_class = int(np.argmax(yhat_single, axis=1))
+                phase_frames[predicted_class + 1][frame_num] = {
+                    'frame_name': f'frame {frame_num}',
+                    'image_path': image_path,
+                    'rom_h': 'sample',
+                    'rom_k': 'sample',
+                    'rom_a': 'sample',
+                    'insole': 'sample',
+                }
+                if index % 10 == 0:  # Update GUI every 10 images processed
+                    current_percent = int(round((index / total_files) * 100))
+                    self.update_percent_label(side, current_percent)
+
+        return phase_frames
+
+    def update_percent_label(self, side, percent):
+        self.percent_label.config(text=f"{side} analyzing data: {percent}%")
+        self.percent_label.update_idletasks()
 
     def table_frame(self):
         self.analyzing_frame.pack_forget()
@@ -487,40 +525,6 @@ class Done_Analyzing(ttk.Frame):
     def send_data(self):
         messagebox.showinfo("Sent data", "Data Sent to Website!")
         self.master.change_frame(self, Again)
-        
-    def load_model_for_side(self, side):
-        return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
-
-    def process_images_for_side(self, side, model):
-        test_data_dir = f'Data_process/{side}'
-        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
-
-        # Exclude the first 10 and last 10 frames
-        image_files = image_files[10:-10]
-
-        phase_frames = {phase_num: {} for phase_num in range(1, 9)}
-
-        for index, image_file in enumerate(image_files):
-            if image_file.endswith('.jpg'):
-                frame_num = int(os.path.splitext(image_file)[0])
-                image_path = os.path.join(test_data_dir, image_file)
-                img = cv2.imread(image_path)
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                resize = cv2.resize(img_rgb, (256, 256))
-                normalized_img = resize / 255.0
-                yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
-                predicted_class = int(np.argmax(yhat_single, axis=1))
-                phase_frames[predicted_class + 1][frame_num] = {
-                    'frame_name': f'frame {frame_num}',
-                    'image_path': image_path,
-                    'rom_h': 'sample',
-                    'rom_k': 'sample',
-                    'rom_a': 'sample',
-                    'insole': 'sample',
-                }
-                current_percent = int(round((index / len(image_files)) * 100))
-                self.percent_label.config(text=f"{side} analyzing data: {current_percent}%")
-        return phase_frames
 
     def update_table(self):
         current_side = self.side_var.get()

@@ -4,7 +4,24 @@ import os
 import numpy as np
 import math
 from PIL import Image
+import csv
 
+#TODO: Use this as reference for the application
+# Function to calculate the angle between three points
+def calculate_angle(a,b,c):
+    a = np.array(a) # First
+    b = np.array(b) # Mid
+    c = np.array(c) # End
+    
+    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+    angle = np.abs(radians*180.0/np.pi)
+    
+    if angle >180.0:
+        angle = 360-angle
+    angle = round(angle, 2)
+    return angle
+
+angle_data = []
 vid_name = 'vid4'
 # Path to the video file
 video_path = f'Data_collection/videos/{vid_name}.mp4'
@@ -22,7 +39,7 @@ cap = cv2.VideoCapture(video_path)
 
 # Check if the video file is opened successfully
 if not cap.isOpened():
-    print("Error: Could not open the video file.")
+    print(f'Error: Could not open the Data_collection/videos/{vid_name}.mp4 file.')
     exit()
 
 # Get the total number of frames in the video
@@ -57,13 +74,25 @@ for frame_number in range(1, total_frames + 1):
         landmarks = results.pose_landmarks.landmark
 
         # Extract specific landmarks
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
         left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+        left_knee = landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value]
         left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
         left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
 
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
         right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+        right_knee = landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value]
         right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
         right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+       
+        angle_right_knee = calculate_angle([right_hip.x, right_hip.y], [right_knee.x, right_knee.y], [right_ankle.x, right_ankle.y])
+        angle_right_hip = calculate_angle([right_shoulder.x, right_shoulder.y], [right_hip.x, right_hip.y], [right_knee.x, right_knee.y])
+        angle_right_ankle = calculate_angle([right_knee.x, right_knee.y], [right_ankle.x, right_ankle.y], [right_foot_tip.x, right_foot_tip.y])
+
+        angle_left_knee = calculate_angle([left_hip.x, left_hip.y], [left_knee.x, left_knee.y], [left_ankle.x, left_ankle.y])
+        angle_left_hip = calculate_angle([left_shoulder.x, left_shoulder.y], [left_hip.x, left_hip.y], [left_knee.x, left_knee.y])
+        angle_left_ankle = calculate_angle([left_knee.x, left_knee.y], [left_ankle.x, left_ankle.y], [left_foot_tip.x, left_foot_tip.y])
 
         # Set bounding box coordinates
         if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
@@ -103,14 +132,19 @@ for frame_number in range(1, total_frames + 1):
                         imgWhite[:, :] = imgResize[:500, :]
 
                 # Save the frame with landmarks and bounding box to the output folder
-                file_name = f"{vid_name}_{frame_number}.jpg"
-                file_path = os.path.join(output_folder, file_name)
-                cv2.imwrite(file_path, imgWhite)
+                angle_data.append([frame_number,angle_right_knee, angle_right_hip, angle_right_ankle, angle_left_knee, angle_left_hip, angle_left_ankle])
+                #file_name = f"{vid_name}_{frame_number}.jpg"
+                #file_path = os.path.join(output_folder, file_name)
+                #cv2.imwrite(file_path, imgWhite)
                 print(f"Landmarks detected in frame {frame_number}.")
 
     else:
         print(f"No landmarks detected in frame {frame_number}.")
-
+#can specify the directory to save the csv file if needed.
+with open(f'{vid_name}_angles.csv', 'w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(["Frame Number", "Right Knee Angle", "Right Hip Angle", "Right Ankle Angle", "Left Knee Angle", "Left Hip Angle", "Left Ankle Angle"])
+    writer.writerows(angle_data)
 # Release the video capture object
 cap.release()
 cv2.destroyAllWindows()

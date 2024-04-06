@@ -6,7 +6,8 @@ import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 
-
+#TODO: add a horizontal bar for extra data
+#TODO: instead na isend data to db in this file, well just put it in a csv file and send it from there using the phpconnect.py file
 def load_model_for_side(side):
     return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
 

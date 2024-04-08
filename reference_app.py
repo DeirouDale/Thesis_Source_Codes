@@ -257,46 +257,62 @@ class Side_Cam(ttk.Frame):
             self.end_btn.pack(fill="both", expand=True)
 
     def toggle_recording(self, state):
-        if not self.recording:
-            self.recording = True
-            self.record_button.config(text="Stop Recording")
-            
-            if state == 1 or state == 6:
-                self.assessment_state_text = 'Left'
-            elif state == 2 or state == 7:
-                self.assessment_state_text = 'Right'
+        try:
+                if not self.recording:
+                        self.recording = True
+                        self.record_button.config(text="Stop Recording")
 
-            fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
-            self.out = cv2.VideoWriter(output_filename, fourcc, 30.0, (1280, 720))  # Original frame rate and size
-            
-        else:
-            self.recording = False
-            self.record_button.config(text="Start Recording")
-            self.out.release()
-            if self.assessment_state == 1:
-                self.change_button(3)
-            elif self.assessment_state == 2:
-                self.change_button(4)
-            else:
-                self.change_button(8)
+                        if state == 1 or state == 6:
+                                self.assessment_state_text = 'Left'
+                        elif state == 2 or state == 7:
+                                self.assessment_state_text = 'Right'
+
+                        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                        output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
+                        self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Original frame rate and size
+
+                else:
+                        self.recording = False
+                        self.record_button.config(text="Start Recording")
+                        if self.out is not None:
+                                self.out.release()
+                                self.out = None
+                        if self.assessment_state == 1:
+                                self.change_button(3)
+                        elif self.assessment_state == 2:
+                                self.change_button(4)
+                        else:
+                                self.change_button(8)
+        except Exception as e:
+                messagebox.showerror("Error", f"An error occurred: {str(e)}")
+                # Release resources if an error occurs
+                if self.out is not None:
+                        self.out.release()
+                        self.out = None
+
             
     def camera_update_thread(self):
-        while True:
-            ret, frame = self.cap.read()
+            # Create the label widget once outside of the loop
+            label = ttk.Label(self.webcam_frame)
+            label.grid(row=0, column=0, sticky='nsew')
 
-            if ret:
-                photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
-                label = ttk.Label(self.webcam_frame, image=photo)
-                label.image = photo
-                label.grid(row=0, column=0, sticky='nsew')
-                label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+            while True:
+                ret, frame = self.cap.read()
 
-                if self.recording:
-                    self.out.write(frame)  
+                if ret:
+                    photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+                    label.config(image=photo)
+                    label.image = photo
+                    
+                    # Check if the label widget is still accessible before placing it
+                    if label.winfo_exists():
+                        label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-            self.webcam_frame.update_idletasks()
-            self.webcam_frame.update()
+                    if self.recording:
+                        self.out.write(frame)  
+
+                self.webcam_frame.update_idletasks()
+                self.webcam_frame.update()
 
     def destroy(self):
         self.cap.release()  
@@ -465,9 +481,8 @@ class Done_Analyzing(ttk.Frame):
                     'rom_a': 'sample',
                     'insole': 'sample',
                 }
-                if index % 10 == 0:  # Update GUI every 10 images processed
-                    current_percent = int(round((index / total_files) * 100))
-                    self.update_percent_label(side, current_percent)
+                current_percent = int(round((index / total_files) * 100))
+                self.update_percent_label(side, current_percent)
 
         return phase_frames
 
@@ -620,5 +635,5 @@ class Again(ttk.Frame):
 
 if __name__ == "__main__":
     app = RefApp((1920, 1080))
-    app.state('zoomed')
+    app.state('normal')
     app.mainloop()

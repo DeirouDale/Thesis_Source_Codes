@@ -96,9 +96,59 @@ class Title(ttk.Frame):
         label_title.grid(row=1, column=0)
         enter_btn.pack(fill="both", expand=True)
 
+'''
+CREATE NEW FRAME FOR LOGIN
+Create database containing user accounts and client accounts
+'''
+
+'''
+CREATE NEW FRAME FOR REGISTRATION OF USER
+insert info to database
+
+'''
+
+'''
+CREATE NEW FRAME FOR REGISTRATION OF CLIENTS
+insert info to database
+
+'''
+'''
+
+CREATE NEW FRAME FOR MENU:
+when navigating menu there should be an option to go to
+start_assessment
+Data saved or Records
+
+then create a navigation frame at the side for easy navigation 
+
+'''
+
+'''
+CREATE NEW FRAME FOR MONITORING DATA
+create CRUD style navigation
+'''
+
+'''
+CREATE NEW FRAME FOR TABLE
+make client info, and panel title as inputs or whichever is better
+retrieve datra from database to create table
+show table
+create option to print table contents
+'''
 class Start_Assessment(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
+        '''
+        Frame for checking if there is an internet connection or not
+        Check if client number is in the local database
+        If client number is in database there should be a window pop up asking if the client number you entered is the correct client
+        example:
+
+        Client: *number*
+        Name: Ismael Gwapo
+
+        Proceed | Change
+        '''
         self.style = style
 
         self.columnconfigure(0, weight=1)
@@ -153,6 +203,12 @@ class Start_Assessment(ttk.Frame):
 
 class Side_Cam(ttk.Frame):
     def __init__(self, parent, style):
+        '''
+        This is the camera option, improve the interface and logic for the buttons
+        Add ESP 32 datga connection and Insole
+        please read change button method for the logic of switching buttons
+        '''
+
         super().__init__(parent)
         self.style = style
 
@@ -320,6 +376,13 @@ class Side_Cam(ttk.Frame):
 
 class Loading_screen(ttk.Frame):
     def __init__(self, parent, style):
+        '''
+        add Range of motion logic here add info or create hashmap containing frame {ROM hips: angle,
+                                                                                    ROM knees: angle,
+                                                                                    ROM ankle: angle
+                                                                                    Insole Data: data(0,0,0)}  
+        
+        '''
         super().__init__(parent)
         self.style = style
 
@@ -426,6 +489,9 @@ class Loading_screen(ttk.Frame):
     
 class Done_Analyzing(ttk.Frame):
     def __init__(self, parent, style):
+        '''
+        This frame will analyze the images using DCNN hashmap from Loading_screen merge with hashmap of Done_analyzing
+        '''
         super().__init__(parent)
         self.style = style
 
@@ -451,7 +517,7 @@ class Done_Analyzing(ttk.Frame):
         self.table_frame()
 
     def load_model_for_side(self, side):
-        return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
+        return load_model(f'Data Inputs/models/{side}_10_Pat_New2.h5')
 
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'
@@ -588,6 +654,9 @@ class Done_Analyzing(ttk.Frame):
 
 class Again(ttk.Frame):
     def __init__(self, parent, style):
+        '''
+        Ask user if they want to assess again or not change this to your liking
+        '''
         super().__init__(parent)
         self.style = style
         

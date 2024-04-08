@@ -465,9 +465,8 @@ class Done_Analyzing(ttk.Frame):
                     'rom_a': 'sample',
                     'insole': 'sample',
                 }
-                if index % 10 == 0:  # Update GUI every 10 images processed
-                    current_percent = int(round((index / total_files) * 100))
-                    self.update_percent_label(side, current_percent)
+                current_percent = int(round((index / total_files) * 100))
+                self.update_percent_label(side, current_percent)
 
         return phase_frames
 

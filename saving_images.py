@@ -5,7 +5,7 @@ import numpy as np
 import math
 from PIL import Image
 
-vid_name = 'vid4'
+vid_name = 'vid 3'
 # Path to the video file
 video_path = f'Data_collection/videos/{vid_name}.mp4'
 

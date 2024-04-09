@@ -296,7 +296,7 @@ class Side_Cam(ttk.Frame):
             self.choose_side_btn2.rowconfigure(0, weight=1)
 
             side_btn = ttk.Button(self.choose_side_btn2, text=f"Start {self.assessment_state_text} Side", command=lambda: self.change_button(second_state))
-            end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Loading_screen))
+            end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
 
             side_btn.grid(row=0, column=0, sticky='nsew')
             end_btn.grid(row=0, column=1, sticky='nsew')
@@ -309,7 +309,7 @@ class Side_Cam(ttk.Frame):
 
             self.end_frame.grid(row=2, column=0, sticky='nsew')
 
-            self.end_btn = ttk.Button(self.end_frame, text="End Video Taking", command=lambda: self.master.change_frame(self, Loading_screen))
+            self.end_btn = ttk.Button(self.end_frame, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
             self.end_btn.pack(fill="both", expand=True)
 
     def toggle_recording(self, state):
@@ -374,17 +374,15 @@ class Side_Cam(ttk.Frame):
         self.cap.release()  
         super().destroy()
 
-class Loading_screen(ttk.Frame):
+class Process_Table(ttk.Frame):
     def __init__(self, parent, style):
-        '''
-        add Range of motion logic here add info or create hashmap containing frame {ROM hips: angle,
-                                                                                    ROM knees: angle,
-                                                                                    ROM ankle: angle
-                                                                                    Insole Data: data(0,0,0)}  
-        
-        '''
         super().__init__(parent)
         self.style = style
+        self.left_model = None
+        self.right_model = None
+        self.left_phase_frames = None
+        self.right_phase_frames = None
+        self.side_frame_numbers = {'Left': {}, 'Right': {}}
 
         self.loading_screen = ttk.Frame(self)
         self.loading_screen.pack(fill='both', expand=True)
@@ -395,8 +393,23 @@ class Loading_screen(ttk.Frame):
         # Start the video_to_image method in a separate thread
         threading.Thread(target=self.video_to_image).start()
 
+    def calculate_angle(self, a, b, c):
+        ab = b - a
+        bc = c - b
+        dot_product = np.dot(ab, bc)
+        magnitude_ab = np.linalg.norm(ab)
+        magnitude_bc = np.linalg.norm(bc)
+        if magnitude_ab == 0 or magnitude_bc == 0:
+            return None  # Avoid division by zero
+        angle_radians = np.arccos(dot_product / (magnitude_ab * magnitude_bc))
+        angle_degrees = np.degrees(angle_radians)
+
+        return angle_degrees
+    
     def video_to_image(self):
         sides = ['Right', 'Left']
+
+        angles_dict = {'Right':{}, 'Left': {}}
 
         for side in sides:
             video_path = f'Data_process/{side}_sample.mp4'
@@ -439,6 +452,19 @@ class Loading_screen(ttk.Frame):
                     right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
                     right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
 
+                    if side == 'Right':
+                        hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
+                        knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
+                        ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
+                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
+                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
+                    else:
+                        hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
+                        knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
+                        ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
+                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
+                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+
                     if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
                         x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
                         y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
@@ -477,87 +503,38 @@ class Loading_screen(ttk.Frame):
                             file_path = os.path.join(output_folder, file_name)
                             cv2.imwrite(file_path, imgWhite)
 
+                            #calculate and save angle of hips, knees, and ankle in a dictionary
+                            hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
+                            knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
+                            ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
+                            angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
+
                 current_percent = int(round((frame_number / total_frames) * 100))
-                self.percent_label.config(text=f"{side} preprocessing: {current_percent}%")
+                self.percent_label.config(text=f"{side} side, preprocessing images: {current_percent}%")
                 
             # Release resources after processing each video
             cap.release()
             cv2.destroyAllWindows()
 
-        # After the video processing is done, change the frame to Done_Analyzing
-        self.master.change_frame(self, Done_Analyzing)
-    
-class Done_Analyzing(ttk.Frame):
-    def __init__(self, parent, style):
-        '''
-        This frame will analyze the images using DCNN hashmap from Loading_screen merge with hashmap of Done_analyzing
-        '''
-        super().__init__(parent)
-        self.style = style
+        # After the video processing is done, start processing images
+        self.process_images(angles_dict)
 
-        # Frames
-        self.analyzing_frame = ttk.Frame(self)
-        self.analyzing_frame.pack(fill='both', expand=True)
-
-        self.percent_label = ttk.Label(self.analyzing_frame, text="", anchor='center', justify='center', font=('Arial', 24))
-        self.percent_label.pack(fill='both', expand=True)
-
-        # Start the video_to_image method in a separate thread
-        threading.Thread(target=self.process_images).start()
-
-    def process_images(self):
+    def process_images(self, angles_dic):
         # Load models for Left and Right
         self.left_model = self.load_model_for_side('Left')
         self.right_model = self.load_model_for_side('Right')
+        self.angles_dict = angles_dic
 
         # Process images for Left and Right
-        self.left_phase_frames = self.process_images_for_side('Left', self.left_model)
-        self.right_phase_frames = self.process_images_for_side('Right', self.right_model)
+        self.left_phase_frames = self.process_images_for_side('Left', self.left_model, self.angles_dict)
+        self.right_phase_frames = self.process_images_for_side('Right', self.right_model, self.angles_dict)
 
+        # Switch to the table frame for further actions
         self.table_frame()
 
-    def load_model_for_side(self, side):
-        return load_model(f'Data Inputs/models/{side}_10_Pat_New2.h5')
-
-    def process_images_for_side(self, side, model):
-        test_data_dir = f'Data_process/{side}'
-        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
-
-        # Exclude the first 10 and last 10 frames
-        image_files = image_files[5:-5]
-
-        phase_frames = {phase_num: {} for phase_num in range(1, 9)}
-
-        total_files = len(image_files)
-        for index, image_file in enumerate(image_files):
-            if image_file.endswith('.jpg'):
-                frame_num = int(os.path.splitext(image_file)[0])
-                image_path = os.path.join(test_data_dir, image_file)
-                img = cv2.imread(image_path)
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                resize = cv2.resize(img_rgb, (256, 256))
-                normalized_img = resize / 255.0
-                yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
-                predicted_class = int(np.argmax(yhat_single, axis=1))
-                phase_frames[predicted_class + 1][frame_num] = {
-                    'frame_name': f'frame {frame_num}',
-                    'image_path': image_path,
-                    'rom_h': 'sample',
-                    'rom_k': 'sample',
-                    'rom_a': 'sample',
-                    'insole': 'sample',
-                }
-                current_percent = int(round((index / total_files) * 100))
-                self.update_percent_label(side, current_percent)
-
-        return phase_frames
-
-    def update_percent_label(self, side, percent):
-        self.percent_label.config(text=f"{side} analyzing data: {percent}%")
-        self.percent_label.update_idletasks()
-
     def table_frame(self):
-        self.analyzing_frame.pack_forget()
+        # Clear existing widgets from loading_screen
+        self.loading_screen.pack_forget()
 
         # Create a Combobox to select the side (Left or Right)
         self.side_var = tk.StringVar()
@@ -597,7 +574,7 @@ class Done_Analyzing(ttk.Frame):
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
 
         # Make the canvas scrollable with the mouse wheel
-        self.canvas.bind('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
+        self.canvas.bind('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
 
         # Create a frame for the table-like structure
         self.table_frame = tk.Frame(self.scrollable_frame)
@@ -606,6 +583,41 @@ class Done_Analyzing(ttk.Frame):
     def send_data(self):
         messagebox.showinfo("Sent data", "Data Sent to Website!")
         self.master.change_frame(self, Again)
+
+    def load_model_for_side(self, side):
+        return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
+
+    def process_images_for_side(self, side, model, angles_dict):
+        test_data_dir = f'Data_process/{side}'
+        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
+        self.angles_dict = angles_dict
+
+        # Exclude the first 10 and last 10 frames
+        image_files = image_files[10:-10]
+
+        phase_frames = {phase_num: {} for phase_num in range(1, 9)}
+
+        for index, image_file in enumerate(image_files):
+            if image_file.endswith('.jpg'):
+                frame_num = int(os.path.splitext(image_file)[0])
+                image_path = os.path.join(test_data_dir, image_file)
+                img = cv2.imread(image_path)
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                resize = cv2.resize(img_rgb, (256, 256))
+                normalized_img = resize / 255.0
+                yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
+                predicted_class = int(np.argmax(yhat_single, axis=1))
+                phase_frames[predicted_class + 1][frame_num] = {
+                    'frame_name': f'frame {frame_num}',
+                    'image_path': image_path,
+                    'rom_h': self.angles_dict[side][frame_num]['hip'],
+                    'rom_k': self.angles_dict[side][frame_num]['knee'],
+                    'rom_a': self.angles_dict[side][frame_num]['ankle'],
+                    'insole': 'sample',
+                }
+                current_percent = int(round((index / len(image_files)) * 100))
+                self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")
+        return phase_frames
 
     def update_table(self):
         current_side = self.side_var.get()

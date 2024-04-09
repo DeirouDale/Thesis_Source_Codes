@@ -585,7 +585,7 @@ class Process_Table(ttk.Frame):
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
-        return load_model(f'Data_collection/models/{side}_10_Pat_New2.h5')
+        return load_model(f'Data Inputs/models/{side}_10_Pat_New2.h5')
 
     def process_images_for_side(self, side, model, angles_dict):
         test_data_dir = f'Data_process/{side}'

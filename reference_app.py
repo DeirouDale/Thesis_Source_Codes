@@ -215,6 +215,11 @@ class Side_Cam(ttk.Frame):
         self.assessment_state = 0
         self.assessment_state_text = 'None'
 
+        '''
+        
+        =============================================== HERE ARE THE NEW VALUES ADDED
+        
+        '''
         self.frame_number = 0
         self.frame_numbers_left = {}
         self.frame_numbers_right = {}
@@ -349,6 +354,11 @@ class Side_Cam(ttk.Frame):
                 self.out.release()
                 self.out = None
 
+    '''
+    
+        CHECK THIS FOR SYNC ESP DATA TO FRAME
+    
+    '''
     def receive_insole(self):
 
         if self.recording:
@@ -361,8 +371,7 @@ class Side_Cam(ttk.Frame):
                 self.frame_number += 1
                 self.frame_numbers_right[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
                 print(f"Right: {self.frame_number}")
-                
-            
+                    
 
     def camera_update_thread(self):
         # Create the label widget once outside of the loop

@@ -9,6 +9,8 @@ import math
 from tensorflow.keras.models import load_model
 import threading
 import time
+import paho.mqtt.client as mqtt
+
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -27,6 +29,7 @@ class RefApp(tk.Tk):
         # Title Frame
         self.title_frame = Title(self, self.style)
         self.title_frame.pack(fill="both", expand=True)
+
 
     def styles(self):
         self.style = ttk.Style()
@@ -170,6 +173,7 @@ class Start_Assessment(ttk.Frame):
         enter_btn = ttk.Button(self, text='ENTER', command=self.patient_database)
         enter_btn.grid(row=2, column=0)
         
+        
     def icon_widgets(self):
         
         self.icon_frame.columnconfigure((0,1), weight=1)
@@ -220,6 +224,9 @@ class Side_Cam(ttk.Frame):
         =============================================== HERE ARE THE NEW VALUES ADDED
         
         '''
+        self.esp1_sensor = []
+        self.flag_connected = 0
+        
         self.frame_number = 0
         self.frame_numbers_left = {}
         self.frame_numbers_right = {}
@@ -243,7 +250,41 @@ class Side_Cam(ttk.Frame):
         self.camera_thread = threading.Thread(target=self.camera_update_thread, daemon=True)
         self.camera_thread.start()
         self.choose_side_btn_widget()
+        
+        self.client = mqtt.Client("rpi_client1") #this should be a unique name
+        self.flag_connected = 0
 
+        self.client.on_connect = self.on_connect
+        self.client.on_disconnect = self.on_disconnect
+        self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
+        self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
+        self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
+        
+    #use only for mqtt here 
+    def on_connect(self, client, userdata, flags, rc):
+        self.flag_connected = 1
+        self.client_subscriptions(self.client)
+        print("Connected to MQTT server")
+
+    def on_disconnect(self, client, userdata, rc):
+        self.flag_connected = 0
+        print("Disconnected from MQTT server")
+
+        # a callback functions 
+        #change from print to append
+    def callback_esp32_sensor1(self, client, userdata, msg):
+        print( 'ESP sensor1 data: ', str(msg.payload.decode('utf-8')))
+
+    def callback_esp32_sensor2(self, client, userdata, msg):
+        print('ESP sensor2 data: ', str(msg.payload.decode('utf-8')))
+
+    def callback_rpi_broadcast(self, client, userdata, msg):
+        print('RPi Broadcast message:  ', str(msg.payload.decode('utf-8')))
+
+    def client_subscriptions(self, client):
+        self.client.subscribe("esp32/#")
+        self.client.subscribe("rpi/broadcast")
+    #end
     def top_frame_widget(self):
         self.top_frame.rowconfigure(0, weight=1)
         self.top_frame.columnconfigure((0,1), weight=1)
@@ -321,17 +362,24 @@ class Side_Cam(ttk.Frame):
             if not self.recording:
                 self.recording = True
                 self.record_button.config(text="Stop Recording")
-
+                
+                self.client.connect('127.0.0.1',1883) # connect to mqtt
+                # start a new thread
+                self.client.loop_start()
+                self.client_subscriptions(self.client)
                 if state == 1 or state == 6:
                     self.assessment_state_text = 'Left'
                 elif state == 2 or state == 7:
                     self.assessment_state_text = 'Right'
-
+                #TODO: update frame numbers here
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
                 self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Reduced frame size
 
             else:
+               
+                self.client.disconnect() #disconnect
+                 
                 self.recording = False
                 self.record_button.config(text="Start Recording")
 
@@ -360,7 +408,7 @@ class Side_Cam(ttk.Frame):
     
     '''
     def receive_insole(self):
-
+        
         if self.recording:
             if self.assessment_state == 1 or self.assessment_state == 6:
                 self.frame_number += 1
@@ -396,8 +444,6 @@ class Side_Cam(ttk.Frame):
                 photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
                 label.config(image=photo)
                 label.image = photo
-
-                self.receive_insole()
                     
                 # Check if the label widget is still accessible before placing it
                 if label.winfo_exists():

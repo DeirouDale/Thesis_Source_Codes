@@ -214,6 +214,10 @@ class Side_Cam(ttk.Frame):
 
         self.assessment_state = 0
         self.assessment_state_text = 'None'
+
+        self.frame_number = 0
+        self.frame_numbers_left = {}
+        self.frame_numbers_right = {}
         
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Reduced frame width
@@ -325,6 +329,10 @@ class Side_Cam(ttk.Frame):
             else:
                 self.recording = False
                 self.record_button.config(text="Start Recording")
+
+                # Frame Number go back to 0
+                self.frame_number = 0
+
                 if self.out is not None:
                     self.out.release()
                     self.out = None
@@ -340,6 +348,21 @@ class Side_Cam(ttk.Frame):
             if self.out is not None:
                 self.out.release()
                 self.out = None
+
+    def receive_insole(self):
+
+        if self.recording:
+            if self.assessment_state == 1 or self.assessment_state == 6:
+                self.frame_number += 1
+                self.frame_numbers_left[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
+                print(f"Left: {self.frame_number}")
+                
+            else:
+                self.frame_number += 1
+                self.frame_numbers_right[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
+                print(f"Right: {self.frame_number}")
+                
+            
 
     def camera_update_thread(self):
         # Create the label widget once outside of the loop
@@ -364,6 +387,8 @@ class Side_Cam(ttk.Frame):
                 photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
                 label.config(image=photo)
                 label.image = photo
+
+                self.receive_insole()
                     
                 # Check if the label widget is still accessible before placing it
                 if label.winfo_exists():
@@ -722,5 +747,5 @@ class Again(ttk.Frame):
 if __name__ == "__main__":
     app = RefApp((1280, 720))
     app.state('normal')
-    app.attributes('-fullscreen', True)
+    # app.attributes('-fullscreen', True)
     app.mainloop()

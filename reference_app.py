@@ -8,6 +8,7 @@ import numpy as np
 import math 
 from tensorflow.keras.models import load_model
 import threading
+import time
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -203,12 +204,6 @@ class Start_Assessment(ttk.Frame):
 
 class Side_Cam(ttk.Frame):
     def __init__(self, parent, style):
-        '''
-        This is the camera option, improve the interface and logic for the buttons
-        Add ESP 32 datga connection and Insole
-        please read change button method for the logic of switching buttons
-        '''
-
         super().__init__(parent)
         self.style = style
 
@@ -221,8 +216,8 @@ class Side_Cam(ttk.Frame):
         self.assessment_state_text = 'None'
         
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Reduced frame width
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Reduced frame height
         self.recording = False
         self.out = None
 
@@ -244,7 +239,7 @@ class Side_Cam(ttk.Frame):
         self.top_frame.rowconfigure(0, weight=1)
         self.top_frame.columnconfigure((0,1), weight=1)
 
-        self.current_patient_label = ttk.Label(self.top_frame, text=f"Current Patient: {self.master.current_patient}", font=('Arial', 20))
+        self.current_patient_label = ttk.Label(self.top_frame, text="Current Patient: None", font=('Arial', 20))  # Changed to 'None'
         self.assessment_state_label = ttk.Label(self.top_frame, text=f"Current Video: {self.assessment_state_text}", font=('Arial', 20))
 
         self.current_patient_label.grid(row=0, column=0)
@@ -314,61 +309,71 @@ class Side_Cam(ttk.Frame):
 
     def toggle_recording(self, state):
         try:
-                if not self.recording:
-                        self.recording = True
-                        self.record_button.config(text="Stop Recording")
+            if not self.recording:
+                self.recording = True
+                self.record_button.config(text="Stop Recording")
 
-                        if state == 1 or state == 6:
-                                self.assessment_state_text = 'Left'
-                        elif state == 2 or state == 7:
-                                self.assessment_state_text = 'Right'
+                if state == 1 or state == 6:
+                    self.assessment_state_text = 'Left'
+                elif state == 2 or state == 7:
+                    self.assessment_state_text = 'Right'
 
-                        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                        output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
-                        self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Original frame rate and size
+                fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
+                self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Reduced frame size
 
-                else:
-                        self.recording = False
-                        self.record_button.config(text="Start Recording")
-                        if self.out is not None:
-                                self.out.release()
-                                self.out = None
-                        if self.assessment_state == 1:
-                                self.change_button(3)
-                        elif self.assessment_state == 2:
-                                self.change_button(4)
-                        else:
-                                self.change_button(8)
-        except Exception as e:
-                messagebox.showerror("Error", f"An error occurred: {str(e)}")
-                # Release resources if an error occurs
+            else:
+                self.recording = False
+                self.record_button.config(text="Start Recording")
                 if self.out is not None:
-                        self.out.release()
-                        self.out = None
+                    self.out.release()
+                    self.out = None
+                if self.assessment_state == 1:
+                    self.change_button(3)
+                elif self.assessment_state == 2:
+                    self.change_button(4)
+                else:
+                    self.change_button(8)
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            # Release resources if an error occurs
+            if self.out is not None:
+                self.out.release()
+                self.out = None
 
-            
     def camera_update_thread(self):
-            # Create the label widget once outside of the loop
-            label = ttk.Label(self.webcam_frame)
-            label.grid(row=0, column=0, sticky='nsew')
+        # Create the label widget once outside of the loop
+        label = ttk.Label(self.webcam_frame)
+        label.grid(row=0, column=0, sticky='nsew')
 
-            while True:
-                ret, frame = self.cap.read()
+        # Throttle Update Rate
+        FRAME_DELAY = 0.033  # Update frame every ~33 milliseconds (approximately 30 fps)
+        last_frame_time = time.time()
 
-                if ret:
-                    photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
-                    label.config(image=photo)
-                    label.image = photo
+        while True:
+            # Throttle frame updates
+            if time.time() - last_frame_time < FRAME_DELAY:
+                time.sleep(0.001)  # Sleep for 1 ms to avoid busy waiting
+                continue
+
+            last_frame_time = time.time()
+
+            ret, frame = self.cap.read()
+
+            if ret:
+                photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+                label.config(image=photo)
+                label.image = photo
                     
-                    # Check if the label widget is still accessible before placing it
-                    if label.winfo_exists():
-                        label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+                # Check if the label widget is still accessible before placing it
+                if label.winfo_exists():
+                    label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-                    if self.recording:
-                        self.out.write(frame)  
+                if self.recording:
+                    self.out.write(frame)  
 
-                self.webcam_frame.update_idletasks()
-                self.webcam_frame.update()
+            self.webcam_frame.update_idletasks()
+            self.webcam_frame.update()
 
     def destroy(self):
         self.cap.release()  
@@ -715,6 +720,7 @@ class Again(ttk.Frame):
         self.master.destroy()
 
 if __name__ == "__main__":
-    app = RefApp((1920, 1080))
+    app = RefApp((1280, 720))
     app.state('normal')
+    app.attributes('-fullscreen', True)
     app.mainloop()

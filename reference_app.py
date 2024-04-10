@@ -259,7 +259,7 @@ class Side_Cam(ttk.Frame):
         self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
         self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
         self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
-        
+        self.client_subscriptions(self.client)
     #use only for mqtt here 
     def on_connect(self, client, userdata, flags, rc):
         self.flag_connected = 1
@@ -364,9 +364,10 @@ class Side_Cam(ttk.Frame):
                 self.record_button.config(text="Stop Recording")
                 
                 self.client.connect('127.0.0.1',1883) # connect to mqtt
+                print("connecting to mqtt")
                 # start a new thread
                 self.client.loop_start()
-                self.client_subscriptions(self.client)
+                
                 if state == 1 or state == 6:
                     self.assessment_state_text = 'Left'
                 elif state == 2 or state == 7:
@@ -379,7 +380,7 @@ class Side_Cam(ttk.Frame):
             else:
                
                 self.client.disconnect() #disconnect
-                 
+                self.client.loop_stop()
                 self.recording = False
                 self.record_button.config(text="Start Recording")
 

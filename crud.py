@@ -1,149 +1,142 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-from tkcalendar import DateEntry
+from tkinter import messagebox
 import mysql.connector
 
-# Global variables for GUI components
-e1 = None  # Patient Number
-e2 = None  # Name
-e3 = None  # Age
-e4 = None  # Gender
-e5 = None  # Birthdate
-e6 = None  # Contact Number
-listBox = None
-gender_var = None
+# Establishing connection to MySQL
+db_connection = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="",
+    database="registration"
+)
 
-def GetValue(event):
-    global e1, e2, e3, e4, e5, e6, listBox
-    
-    # Clear existing entry values
-    ClearEntries()
-
-    # Retrieve selected row values
-    selected_item = listBox.focus()
-    if selected_item:
-        values = listBox.item(selected_item)['values']
-        if values:
-            e1.insert(0, values[0])  # Patient Number
-            e2.insert(0, values[1])  # Name
-            e3.insert(0, values[2])  # Age
-            e4.set(values[3])       # Gender
-            e5.set_date(values[4])   # Birthdate
-            e6.insert(0, values[5])  # Contact Number
-
-def Add():
-    global e1, e2, e3, e4, e5, e6, listBox, gender_var
-    
-    patient_number = e1.get()
-    name = e2.get()
-    age = e3.get()
+# Function to create a new patient record
+def create_patient():
+    patient_number = patient_number_entry.get()
+    name = name_entry.get()
+    age = age_entry.get()
     gender = gender_var.get()
-    birthdate = e5.get_date().strftime('%Y-%m-%d') if e5.get_date() else None
-    contact_number = e6.get()
+    birthdate = birthdate_entry.get()
+    address = address_entry.get()
 
-    # Connect to MySQL database
-    mysqldb = mysql.connector.connect(host="localhost", user="root", password="", database="registration")
-    mycursor = mysqldb.cursor()
-
-    try:
-        sql = "INSERT INTO patients (patient_number, name, age, gender, birthdate, contact_number) VALUES (%s, %s, %s, %s, %s, %s)"
-        val = (patient_number, name, age, gender, birthdate, contact_number)
-        mycursor.execute(sql, val)
-        mysqldb.commit()
-        messagebox.showinfo("Information", "Patient added successfully...")
-        ClearEntries()
-        show()
-    except Exception as e:
-        print(e)
-        messagebox.showerror("Error", "Failed to add patient.")
-        mysqldb.rollback()
-    finally:
-        mysqldb.close()
-
-def ClearEntries():
-    global e1, e2, e3, e4, e5, e6
-    
-    if e1:
-        e1.delete(0, tk.END)
-    if e2:
-        e2.delete(0, tk.END)
-    if e3:
-        e3.delete(0, tk.END)
-    if e4:
-        e4.set('Male')  # Default gender
-    if e5:
-        e5.set_date(None)  # Clear DateEntry widget
-    if e6:
-        e6.delete(0, tk.END)
-
-    if e1:
-        e1.focus_set()
-
-def show():
-    global listBox
-    
-    # Connect to MySQL database
-    mysqldb = mysql.connector.connect(host="localhost", user="root", password="", database="registration")
-    mycursor = mysqldb.cursor()
+    cursor = db_connection.cursor()
+    insert_query = "INSERT INTO patients (patient_number, name, age, gender, birthdate, address) VALUES (%s, %s, %s, %s, %s, %s)"
+    patient_data = (patient_number, name, age, gender, birthdate, address)
     
     try:
-        listBox.delete(*listBox.get_children())  # Clear previous data
-        mycursor.execute("SELECT * FROM patients")
-        records = mycursor.fetchall()
+        cursor.execute(insert_query, patient_data)
+        db_connection.commit()
+        messagebox.showinfo("Success", "Patient created successfully!")
+        clear_fields()
+    except mysql.connector.Error as err:
+        messagebox.showerror("Error", f"Error creating patient: {err}")
+    
+    cursor.close()
 
-        for record in records:
-            listBox.insert("", "end", values=record)
-    except Exception as e:
-        print(e)
-        messagebox.showerror("Error", "Failed to fetch patients.")
-    finally:
-        mysqldb.close()
+# Function to update an existing patient record
+def update_patient():
+    patient_id = update_id_entry.get()
+    new_address = new_address_entry.get()
 
-# GUI setup
+    cursor = db_connection.cursor()
+    update_query = "UPDATE patients SET address = %s WHERE id = %s"
+    
+    try:
+        cursor.execute(update_query, (new_address, patient_id))
+        db_connection.commit()
+        messagebox.showinfo("Success", "Patient updated successfully!")
+        clear_update_fields()
+    except mysql.connector.Error as err:
+        messagebox.showerror("Error", f"Error updating patient: {err}")
+    
+    cursor.close()
+
+# Function to delete an existing patient record
+def delete_patient():
+    patient_id = delete_id_entry.get()
+
+    cursor = db_connection.cursor()
+    delete_query = "DELETE FROM patients WHERE id = %s"
+    
+    try:
+        cursor.execute(delete_query, (patient_id,))
+        db_connection.commit()
+        messagebox.showinfo("Success", "Patient deleted successfully!")
+        delete_id_entry.delete(0, tk.END)  # Clear the entry field after deletion
+    except mysql.connector.Error as err:
+        messagebox.showerror("Error", f"Error deleting patient: {err}")
+    
+    cursor.close()
+
+# Function to clear entry fields for creating a new patient
+def clear_fields():
+    patient_number_entry.delete(0, tk.END)
+    name_entry.delete(0, tk.END)
+    age_entry.delete(0, tk.END)
+    gender_var.set("Male")
+    birthdate_entry.delete(0, tk.END)
+    address_entry.delete(0, tk.END)
+
+# Function to clear entry fields for updating a patient
+def clear_update_fields():
+    update_id_entry.delete(0, tk.END)
+    new_address_entry.delete(0, tk.END)
+
+# Create the main window
 root = tk.Tk()
-root.geometry("800x500")
-root.title("Patient Registration")
+root.title("Patient Management System")
 
-tk.Label(root, text="Patient Registration", fg="red", font=(None, 30)).place(x=250, y=5)
+# Create labels and entry fields for patient details
+tk.Label(root, text="Patient Number:").grid(row=0, column=0, padx=10, pady=5)
+patient_number_entry = tk.Entry(root)
+patient_number_entry.grid(row=0, column=1, padx=10, pady=5)
 
-tk.Label(root, text="Patient Number").place(x=10, y=50)
-tk.Label(root, text="Name").place(x=10, y=80)
-tk.Label(root, text="Age").place(x=10, y=110)
-tk.Label(root, text="Gender").place(x=10, y=140)
-tk.Label(root, text="Birthdate").place(x=10, y=170)
-tk.Label(root, text="Contact Number").place(x=10, y=200)
+tk.Label(root, text="Name:").grid(row=1, column=0, padx=10, pady=5)
+name_entry = tk.Entry(root)
+name_entry.grid(row=1, column=1, padx=10, pady=5)
 
-e1 = tk.Entry(root)
-e1.place(x=140, y=50)
+tk.Label(root, text="Age:").grid(row=2, column=0, padx=10, pady=5)
+age_entry = tk.Entry(root)
+age_entry.grid(row=2, column=1, padx=10, pady=5)
 
-e2 = tk.Entry(root)
-e2.place(x=140, y=80)
-
-e3 = tk.Entry(root)
-e3.place(x=140, y=110)
-
+tk.Label(root, text="Gender:").grid(row=3, column=0, padx=10, pady=5)
 gender_var = tk.StringVar(root)
-gender_var.set('Male')  # Default gender
-gender_option = ttk.Combobox(root, textvariable=gender_var, values=['Male', 'Female', 'Other'])
-gender_option.place(x=140, y=140)
+gender_var.set("Male")
+gender_menu = tk.OptionMenu(root, gender_var, "Male", "Female", "Other")
+gender_menu.grid(row=3, column=1, padx=10, pady=5)
 
-e5 = DateEntry(root, width=12, background='darkblue', foreground='white', borderwidth=2)
-e5.place(x=140, y=170)
+tk.Label(root, text="Birthdate (YYYY-MM-DD):").grid(row=4, column=0, padx=10, pady=5)
+birthdate_entry = tk.Entry(root)
+birthdate_entry.grid(row=4, column=1, padx=10, pady=5)
 
-e6 = tk.Entry(root)
-e6.place(x=140, y=200)
+tk.Label(root, text="Contact Number:").grid(row=5, column=0, padx=10, pady=5)
+address_entry = tk.Entry(root)
+address_entry.grid(row=5, column=1, padx=10, pady=5)
 
-tk.Button(root, text="Add", command=Add).place(x=30, y=240)
-tk.Button(root, text="Clear", command=ClearEntries).place(x=140, y=240)
+# Create buttons for CRUD operations (Create, Update, Delete)
+tk.Button(root, text="Create", command=create_patient).grid(row=6, column=0, padx=10, pady=10)
+tk.Button(root, text="Clear", command=clear_fields).grid(row=6, column=1, padx=10, pady=10)
 
-cols = ('ID','Patient Number', 'Name', 'Age', 'Gender', 'Birthdate', 'Contact Number')
-listBox = ttk.Treeview(root, columns=cols, show='headings')
-for col in cols:
-    listBox.heading(col, text=col)
-    listBox.grid(row=1, column=0, columnspan=2)
-    listBox.place(x=10, y=280)
+# Create labels and entry fields for updating a patient
+tk.Label(root, text="Patient ID to Update:").grid(row=7, column=0, padx=10, pady=5)
+update_id_entry = tk.Entry(root)
+update_id_entry.grid(row=7, column=1, padx=10, pady=5)
 
-show()
-listBox.bind('<Double-Button-1>', GetValue)
+tk.Label(root, text="New Contact Number:").grid(row=8, column=0, padx=10, pady=5)
+new_address_entry = tk.Entry(root)
+new_address_entry.grid(row=8, column=1, padx=10, pady=5)
 
+tk.Button(root, text="Update", command=update_patient).grid(row=9, column=0, columnspan=2, padx=10, pady=10)
+
+# Create labels and entry field for deleting a patient
+tk.Label(root, text="Patient ID to Delete:").grid(row=10, column=0, padx=10, pady=5)
+delete_id_entry = tk.Entry(root)
+delete_id_entry.grid(row=10, column=1, padx=10, pady=5)
+
+tk.Button(root, text="Delete", command=delete_patient).grid(row=11, column=0, columnspan=2, padx=10, pady=10)
+
+# Run the main event loop
 root.mainloop()
+
+# Close the database connection
+db_connection.close()

@@ -8,7 +8,6 @@ import numpy as np
 import math 
 from tensorflow.keras.models import load_model
 import threading
-import time
 import paho.mqtt.client as mqtt
 import csv
 
@@ -23,11 +22,8 @@ class RefApp(tk.Tk):
         #styles
         self.styles()
 
-        #side_flag
-        self.side_flag = 'None'
         self.current_patient = 'None'
         self.side_state = {'Right': 0, 'Left':0}
-
         self.frame_numbers_insole = {'Left': {}, 'Right': {}}
 
         # Title Frame
@@ -136,12 +132,23 @@ class Start_Assessment(ttk.Frame):
         patient_label_entry.grid(row=0, column=0)
         self.patient_entry.grid(row=0, column=1)
     
+    def clear_folder(self, folder_path):
+        # List all items in the folder
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            
+            # Check if it's a file or directory
+            if os.path.isfile(item_path):
+                # If it's a file, remove it
+                os.remove(item_path)
 
     def patient_database(self):
         patient_nums = ['24-00001', '24-00002', '24-00003', '24-00004', '24-00005', '']
         entry_num = self.patient_entry.get()
         if entry_num in patient_nums:
             self.master.current_patient = entry_num
+            self.clear_folder('Data_process/Left')
+            self.clear_folder('Data_process/Right')
             self.master.change_frame(self, Side_Cam)
         else:
             messagebox.showinfo("Application Database Message", "Patient not in device list, refresh or check website")
@@ -281,7 +288,7 @@ class Side_Cam(ttk.Frame):
                 self.choose_side_btn2.rowconfigure(0, weight=1)
 
                 side_btn = ttk.Button(self.choose_side_btn2, text=f"Start Left Side", command=lambda: self.change_button('left'))
-                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Title))
+                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
 
                 side_btn.grid(row=0, column=0, sticky='nsew')
                 end_btn.grid(row=0, column=1, sticky='nsew')
@@ -293,12 +300,12 @@ class Side_Cam(ttk.Frame):
                 self.choose_side_btn2.rowconfigure(0, weight=1)
 
                 side_btn = ttk.Button(self.choose_side_btn2, text=f"Start Right Side", command=lambda: self.change_button('right'))
-                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Title))
+                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
 
                 side_btn.grid(row=0, column=0, sticky='nsew')
                 end_btn.grid(row=0, column=1, sticky='nsew')
             elif self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 1:
-                self.master.change_frame(self, Title)
+                self.master.change_frame(self, Process_Table)
 
     def toggle_recording(self, state):
         try:
@@ -413,11 +420,18 @@ class Process_Table(ttk.Frame):
         return angle_degrees
     
     def video_to_image(self):
-        sides = ['Right', 'Left']
 
-        angles_dict = {'Right':{}, 'Left': {}}
+        angles_dict = {'Right': {}, 'Left': {}}
+        side = ''
 
-        for side in sides:
+        if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
+            side = 'Right'
+        elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
+            side = 'Left'
+        else:
+            side = 'Both'
+
+        if side == 'Right' or side == 'Left':
             video_path = f'Data_process/{side}_vid.avi' #video path
             output_folder = f'Data_process/{side}'
             os.makedirs(output_folder, exist_ok=True)
@@ -521,19 +535,130 @@ class Process_Table(ttk.Frame):
             # Release resources after processing each video
             cap.release()
             cv2.destroyAllWindows()
+        else:
+            sides = ['Right', 'Left']
+            for side in sides:
+                video_path = f'Data_process/{side}_vid.avi' #video path
+                output_folder = f'Data_process/{side}'
+                os.makedirs(output_folder, exist_ok=True)
 
+                mp_pose = mp.solutions.pose
+                pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+                cap = cv2.VideoCapture(video_path)
+
+                if not cap.isOpened():
+                    print("Error: Could not open the video file.")
+                    exit()
+
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+                for frame_number in range(1, total_frames + 1):
+                    ret, frame = cap.read()
+
+                    if not ret:
+                        print(f"Error: Could not read frame {frame_number}.")
+                        break
+
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                    results = pose.process(frame_rgb)
+
+                    if results.pose_landmarks:
+                        mp_drawing = mp.solutions.drawing_utils
+                        mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+
+                        landmarks = results.pose_landmarks.landmark
+
+                        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+                        left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+                        left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
+
+                        right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+                        right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+                        right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+
+                        if side == 'Right':
+                            hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
+                            knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
+                            ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
+                            shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
+                            foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
+                        else:
+                            hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
+                            knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
+                            ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
+                            shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
+                            foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+
+                        if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
+                            x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
+                            y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
+                            x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
+                            y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
+
+                            bounding_box_content = frame[y_min:y_max, x_min:x_max]
+
+                            imgWhite = np.ones((500, 500, 3), np.uint8) * 255
+
+                            # Resize and adjust the bounding box content
+                            if bounding_box_content.size > 0:
+                                content_height, content_width, _ = bounding_box_content.shape
+                                aspect_ratio = content_height / content_width
+
+                                if aspect_ratio > 1:
+                                    k = 500 / content_height
+                                    wCal = math.ceil(k * content_width)
+                                    imgResize = cv2.resize(bounding_box_content, (wCal, 500))
+                                    wGap = math.ceil((500 - wCal) / 2)
+                                    if imgResize.shape[1] < 500:
+                                        imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                                    else:
+                                        imgWhite[:, :] = imgResize[:, :500]
+                                else:
+                                    k = 500 / content_width
+                                    hCal = math.ceil(k * content_height)
+                                    imgResize = cv2.resize(bounding_box_content, (500, hCal))
+                                    hGap = math.ceil((500 - hCal) / 2)
+                                    if imgResize.shape[0] < 500:
+                                        imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                                    else:
+                                        imgWhite[:, :] = imgResize[:500, :]
+
+                                file_name = f"{frame_number}.jpg"
+                                file_path = os.path.join(output_folder, file_name)
+                                cv2.imwrite(file_path, imgWhite)
+
+                                #calculate and save angle of hips, knees, and ankle in a dictionary
+                                hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
+                                knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
+                                ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
+                                angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
+
+                    current_percent = int(round((frame_number / total_frames) * 100))
+                    self.percent_label.config(text=f"{side} side, preprocessing images: {current_percent}%")
+                    
+                # Release resources after processing each video
+                cap.release()
+                cv2.destroyAllWindows()
         # After the video processing is done, start processing images
         self.process_images(angles_dict)
 
     def process_images(self, angles_dic):
         # Load models for Left and Right
-        self.left_model = self.load_model_for_side('Left')
-        self.right_model = self.load_model_for_side('Right')
         self.angles_dict = angles_dic
 
-        # Process images for Left and Right
-        self.left_phase_frames = self.process_images_for_side('Left', self.left_model, self.angles_dict)
-        self.right_phase_frames = self.process_images_for_side('Right', self.right_model, self.angles_dict)
+        if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
+            self.right_model = self.load_model_for_side('Right')
+            self.right_phase_frames = self.process_images_for_side('Right', self.right_model, self.angles_dict)
+        elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
+            self.left_model = self.load_model_for_side('Left')
+            self.left_phase_frames = self.process_images_for_side('Left', self.left_model, self.angles_dict)
+        else:
+            self.right_model = self.load_model_for_side('Right')
+            self.left_model = self.load_model_for_side('Left')
+            self.left_phase_frames = self.process_images_for_side('Left', self.left_model, self.angles_dict)
+            self.right_phase_frames = self.process_images_for_side('Right', self.right_model, self.angles_dict)
 
         # Switch to the table frame for further actions
         self.table_frame()
@@ -545,7 +670,12 @@ class Process_Table(ttk.Frame):
         # Create a Combobox to select the side (Left or Right)
         self.side_var = tk.StringVar()
         self.side_var.set('Left')  # Default value
-        self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Left', 'Right'], state="readonly")
+        if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
+            self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Right'], state="readonly")
+        elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
+            self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Left'], state="readonly")
+        else:
+            self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Left', 'Right'], state="readonly")
         self.side_selector.pack()
 
         # Create a Combobox to select phase number
@@ -613,13 +743,22 @@ class Process_Table(ttk.Frame):
                 normalized_img = resize / 255.0
                 yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
                 predicted_class = int(np.argmax(yhat_single, axis=1))
+
+                # Set default values for angles if key is not found
+                try:
+                    rom_h = self.angles_dict[side][frame_num]['hip']
+                    rom_k = self.angles_dict[side][frame_num]['knee']
+                    rom_a = self.angles_dict[side][frame_num]['ankle']
+                except KeyError:
+                    rom_h = rom_k = rom_a = 0
+
                 phase_frames[predicted_class + 1][frame_num] = {
                     'frame_name': f'frame {frame_num}',
                     'image_path': image_path,
-                    'rom_h': self.angles_dict[side][frame_num]['hip'],
-                    'rom_k': self.angles_dict[side][frame_num]['knee'],
-                    'rom_a': self.angles_dict[side][frame_num]['ankle'],
-                    'insole': self.master.frame_numbers_insole[side][frame_num]
+                    'rom_h': rom_h,
+                    'rom_k': rom_k,
+                    'rom_a': rom_a,
+                    'insole': 'Sample'
                 }
                 current_percent = int(round((index / len(image_files)) * 100))
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")

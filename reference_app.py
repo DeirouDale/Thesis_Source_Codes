@@ -10,6 +10,7 @@ from tensorflow.keras.models import load_model
 import threading
 import time
 import paho.mqtt.client as mqtt
+import csv
 
 
 class RefApp(tk.Tk):
@@ -40,24 +41,9 @@ class RefApp(tk.Tk):
                              font=('Arial', 18),
                              padding=[15,15,15,15]
                              )
-        self.style.map('TButton', background=[('active', '#004ea5')])
         self.style.configure('title_box.TFrame',
                              background='orange'
                              )
-        
-        self.style.configure('left_option.TButton',
-                             foreground='white',
-                             background='#003066',
-                             font=('Arial', 18),
-                             )
-        self.style.map('left_option.TButton', background=[('active', '#004ea5')])
-
-        self.style.configure('right_option.TButton',
-                             foreground='white',
-                             background='#ff6701',
-                             font=('Arial', 18),
-                             )
-        self.style.map('right_option.TButton', background=[('active', '#ee9f27')])
         
     def change_frame(self, current_frame, next_frame_class):
         #current frame change removed
@@ -224,7 +210,7 @@ class Side_Cam(ttk.Frame):
         =============================================== HERE ARE THE NEW VALUES ADDED
         
         '''
-        self.esp1_sensor = []
+        self.esp1_sensor_data = []
         self.flag_connected = 0
         
         self.frame_number = 0
@@ -273,8 +259,8 @@ class Side_Cam(ttk.Frame):
         # a callback functions 
         #change from print to append
     def callback_esp32_sensor1(self, client, userdata, msg):
-        print( 'ESP sensor1 data: ', str(msg.payload.decode('utf-8')))
-
+        print(str(msg.payload.decode('utf-8'))," ",self.frame_number)
+        self.esp1_sensor_data.append([str(msg.payload.decode('utf-8')),self.frame_number])
     def callback_esp32_sensor2(self, client, userdata, msg):
         print('ESP sensor2 data: ', str(msg.payload.decode('utf-8')))
 
@@ -445,13 +431,14 @@ class Side_Cam(ttk.Frame):
                 photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
                 label.config(image=photo)
                 label.image = photo
-                    
+                 
                 # Check if the label widget is still accessible before placing it
                 if label.winfo_exists():
                     label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
                 if self.recording:
                     self.out.write(frame)  
+                    self.frame_number +=1
 
             self.webcam_frame.update_idletasks()
             self.webcam_frame.update()
@@ -498,7 +485,7 @@ class Process_Table(ttk.Frame):
         angles_dict = {'Right':{}, 'Left': {}}
 
         for side in sides:
-            video_path = f'Data_process/{side}_sample.mp4'
+            video_path = f'Data_process/{side}_vid.avi' #video path
             output_folder = f'Data_process/{side}'
             os.makedirs(output_folder, exist_ok=True)
 

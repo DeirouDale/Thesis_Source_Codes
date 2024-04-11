@@ -210,7 +210,7 @@ class Side_Cam(ttk.Frame):
         # self.esp1_sensor_data.append([str(msg.payload.decode('utf-8')),self.frame_number])
 
         # this is where I would save the esp data to dictionary where in the key is frame and the out is esp, example: {55: espdata}
-        self.receive_insole(str(msg.payload.decode('utf-8')))
+        self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
 
     def callback_esp32_sensor2(self, client, userdata, msg):
         print('ESP sensor2 data: ', str(msg.payload.decode('utf-8')))
@@ -340,17 +340,15 @@ class Side_Cam(ttk.Frame):
                 self.out.release()
                 self.out = None
 
-    def receive_insole(self, espdata):
+    def receive_insole(self, espdata, frame_number):
         
         if self.recording:
             if self.assessment_state == 1 or self.assessment_state == 6:
-                self.frame_number += 1
-                self.master.frame_numbers_insole['Left'][self.frame_number] = espdata
+                self.master.frame_numbers_insole['Left'][frame_number] = espdata
                 print(f"Left: {self.frame_number}")
                 
             else:
-                self.frame_number += 1
-                self.master.frame_numbers_insole['Right'][self.frame_number] = espdata
+                self.master.frame_numbers_insole['Right'][frame_number] = espdata
                 print(f"Right: {self.frame_number}")
                     
 
@@ -632,7 +630,7 @@ class Process_Table(ttk.Frame):
                     'rom_h': self.angles_dict[side][frame_num]['hip'],
                     'rom_k': self.angles_dict[side][frame_num]['knee'],
                     'rom_a': self.angles_dict[side][frame_num]['ankle'],
-                    'insole': self.master.frame_numbers_insole[side][frame_num],
+                    'insole': self.master.frame_numbers_insole[side][frame_num]
                 }
                 current_percent = int(round((index / len(image_files)) * 100))
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")

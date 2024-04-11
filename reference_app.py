@@ -8,6 +8,9 @@ import numpy as np
 import math 
 from tensorflow.keras.models import load_model
 import threading
+import time
+import paho.mqtt.client as mqtt
+
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -26,6 +29,7 @@ class RefApp(tk.Tk):
         # Title Frame
         self.title_frame = Title(self, self.style)
         self.title_frame.pack(fill="both", expand=True)
+
 
     def styles(self):
         self.style = ttk.Style()
@@ -169,6 +173,7 @@ class Start_Assessment(ttk.Frame):
         enter_btn = ttk.Button(self, text='ENTER', command=self.patient_database)
         enter_btn.grid(row=2, column=0)
         
+        
     def icon_widgets(self):
         
         self.icon_frame.columnconfigure((0,1), weight=1)
@@ -203,12 +208,6 @@ class Start_Assessment(ttk.Frame):
 
 class Side_Cam(ttk.Frame):
     def __init__(self, parent, style):
-        '''
-        This is the camera option, improve the interface and logic for the buttons
-        Add ESP 32 datga connection and Insole
-        please read change button method for the logic of switching buttons
-        '''
-
         super().__init__(parent)
         self.style = style
 
@@ -219,10 +218,22 @@ class Side_Cam(ttk.Frame):
 
         self.assessment_state = 0
         self.assessment_state_text = 'None'
+
+        '''
+        
+        =============================================== HERE ARE THE NEW VALUES ADDED
+        
+        '''
+        self.esp1_sensor = []
+        self.flag_connected = 0
+        
+        self.frame_number = 0
+        self.frame_numbers_left = {}
+        self.frame_numbers_right = {}
         
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Reduced frame width
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Reduced frame height
         self.recording = False
         self.out = None
 
@@ -239,12 +250,46 @@ class Side_Cam(ttk.Frame):
         self.camera_thread = threading.Thread(target=self.camera_update_thread, daemon=True)
         self.camera_thread.start()
         self.choose_side_btn_widget()
+        
+        self.client = mqtt.Client("rpi_client1") #this should be a unique name
+        self.flag_connected = 0
 
+        self.client.on_connect = self.on_connect
+        self.client.on_disconnect = self.on_disconnect
+        self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
+        self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
+        self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
+        self.client_subscriptions(self.client)
+    #use only for mqtt here 
+    def on_connect(self, client, userdata, flags, rc):
+        self.flag_connected = 1
+        self.client_subscriptions(self.client)
+        print("Connected to MQTT server")
+
+    def on_disconnect(self, client, userdata, rc):
+        self.flag_connected = 0
+        print("Disconnected from MQTT server")
+
+        # a callback functions 
+        #change from print to append
+    def callback_esp32_sensor1(self, client, userdata, msg):
+        print( 'ESP sensor1 data: ', str(msg.payload.decode('utf-8')))
+
+    def callback_esp32_sensor2(self, client, userdata, msg):
+        print('ESP sensor2 data: ', str(msg.payload.decode('utf-8')))
+
+    def callback_rpi_broadcast(self, client, userdata, msg):
+        print('RPi Broadcast message:  ', str(msg.payload.decode('utf-8')))
+
+    def client_subscriptions(self, client):
+        self.client.subscribe("esp32/#")
+        self.client.subscribe("rpi/broadcast")
+    #end
     def top_frame_widget(self):
         self.top_frame.rowconfigure(0, weight=1)
         self.top_frame.columnconfigure((0,1), weight=1)
 
-        self.current_patient_label = ttk.Label(self.top_frame, text=f"Current Patient: {self.master.current_patient}", font=('Arial', 20))
+        self.current_patient_label = ttk.Label(self.top_frame, text="Current Patient: None", font=('Arial', 20))  # Changed to 'None'
         self.assessment_state_label = ttk.Label(self.top_frame, text=f"Current Video: {self.assessment_state_text}", font=('Arial', 20))
 
         self.current_patient_label.grid(row=0, column=0)
@@ -296,7 +341,7 @@ class Side_Cam(ttk.Frame):
             self.choose_side_btn2.rowconfigure(0, weight=1)
 
             side_btn = ttk.Button(self.choose_side_btn2, text=f"Start {self.assessment_state_text} Side", command=lambda: self.change_button(second_state))
-            end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Loading_screen))
+            end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
 
             side_btn.grid(row=0, column=0, sticky='nsew')
             end_btn.grid(row=0, column=1, sticky='nsew')
@@ -309,82 +354,121 @@ class Side_Cam(ttk.Frame):
 
             self.end_frame.grid(row=2, column=0, sticky='nsew')
 
-            self.end_btn = ttk.Button(self.end_frame, text="End Video Taking", command=lambda: self.master.change_frame(self, Loading_screen))
+            self.end_btn = ttk.Button(self.end_frame, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
             self.end_btn.pack(fill="both", expand=True)
 
     def toggle_recording(self, state):
         try:
-                if not self.recording:
-                        self.recording = True
-                        self.record_button.config(text="Stop Recording")
+            if not self.recording:
+                self.recording = True
+                self.record_button.config(text="Stop Recording")
+                
+                self.client.connect('127.0.0.1',1883) # connect to mqtt
+                print("connecting to mqtt")
+                # start a new thread
+                self.client.loop_start()
+                
+                if state == 1 or state == 6:
+                    self.assessment_state_text = 'Left'
+                elif state == 2 or state == 7:
+                    self.assessment_state_text = 'Right'
+                #TODO: update frame numbers here
+                fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
+                self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Reduced frame size
 
-                        if state == 1 or state == 6:
-                                self.assessment_state_text = 'Left'
-                        elif state == 2 or state == 7:
-                                self.assessment_state_text = 'Right'
+            else:
+               
+                self.client.disconnect() #disconnect
+                self.client.loop_stop()
+                self.recording = False
+                self.record_button.config(text="Start Recording")
 
-                        fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                        output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
-                        self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Original frame rate and size
+                # Frame Number go back to 0
+                self.frame_number = 0
 
-                else:
-                        self.recording = False
-                        self.record_button.config(text="Start Recording")
-                        if self.out is not None:
-                                self.out.release()
-                                self.out = None
-                        if self.assessment_state == 1:
-                                self.change_button(3)
-                        elif self.assessment_state == 2:
-                                self.change_button(4)
-                        else:
-                                self.change_button(8)
-        except Exception as e:
-                messagebox.showerror("Error", f"An error occurred: {str(e)}")
-                # Release resources if an error occurs
                 if self.out is not None:
-                        self.out.release()
-                        self.out = None
+                    self.out.release()
+                    self.out = None
+                if self.assessment_state == 1:
+                    self.change_button(3)
+                elif self.assessment_state == 2:
+                    self.change_button(4)
+                else:
+                    self.change_button(8)
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+            # Release resources if an error occurs
+            if self.out is not None:
+                self.out.release()
+                self.out = None
 
-            
-    def camera_update_thread(self):
-            # Create the label widget once outside of the loop
-            label = ttk.Label(self.webcam_frame)
-            label.grid(row=0, column=0, sticky='nsew')
-
-            while True:
-                ret, frame = self.cap.read()
-
-                if ret:
-                    photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
-                    label.config(image=photo)
-                    label.image = photo
+    '''
+    
+        CHECK THIS FOR SYNC ESP DATA TO FRAME
+    
+    '''
+    def receive_insole(self):
+        
+        if self.recording:
+            if self.assessment_state == 1 or self.assessment_state == 6:
+                self.frame_number += 1
+                self.frame_numbers_left[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
+                print(f"Left: {self.frame_number}")
+                
+            else:
+                self.frame_number += 1
+                self.frame_numbers_right[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
+                print(f"Right: {self.frame_number}")
                     
-                    # Check if the label widget is still accessible before placing it
-                    if label.winfo_exists():
-                        label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
-                    if self.recording:
-                        self.out.write(frame)  
+    def camera_update_thread(self):
+        # Create the label widget once outside of the loop
+        label = ttk.Label(self.webcam_frame)
+        label.grid(row=0, column=0, sticky='nsew')
 
-                self.webcam_frame.update_idletasks()
-                self.webcam_frame.update()
+        # Throttle Update Rate
+        FRAME_DELAY = 0.033  # Update frame every ~33 milliseconds (approximately 30 fps)
+        last_frame_time = time.time()
+
+        while True:
+            # Throttle frame updates
+            if time.time() - last_frame_time < FRAME_DELAY:
+                time.sleep(0.001)  # Sleep for 1 ms to avoid busy waiting
+                continue
+
+            last_frame_time = time.time()
+
+            ret, frame = self.cap.read()
+
+            if ret:
+                photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+                label.config(image=photo)
+                label.image = photo
+                    
+                # Check if the label widget is still accessible before placing it
+                if label.winfo_exists():
+                    label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
+                if self.recording:
+                    self.out.write(frame)  
+
+            self.webcam_frame.update_idletasks()
+            self.webcam_frame.update()
 
     def destroy(self):
         self.cap.release()  
         super().destroy()
 
-class Loading_screen(ttk.Frame):
+class Process_Table(ttk.Frame):
     def __init__(self, parent, style):
-        '''
-        add Range of motion logic here add info or create hashmap containing frame {ROM hips: angle,
-                                                                                    ROM knees: angle,
-                                                                                    ROM ankle: angle
-                                                                                    Insole Data: data(0,0,0)}  
-        
-        '''
         super().__init__(parent)
         self.style = style
+        self.left_model = None
+        self.right_model = None
+        self.left_phase_frames = None
+        self.right_phase_frames = None
+        self.side_frame_numbers = {'Left': {}, 'Right': {}}
 
         self.loading_screen = ttk.Frame(self)
         self.loading_screen.pack(fill='both', expand=True)
@@ -395,8 +479,23 @@ class Loading_screen(ttk.Frame):
         # Start the video_to_image method in a separate thread
         threading.Thread(target=self.video_to_image).start()
 
+    def calculate_angle(self, a, b, c):
+        ab = b - a
+        bc = c - b
+        dot_product = np.dot(ab, bc)
+        magnitude_ab = np.linalg.norm(ab)
+        magnitude_bc = np.linalg.norm(bc)
+        if magnitude_ab == 0 or magnitude_bc == 0:
+            return None  # Avoid division by zero
+        angle_radians = np.arccos(dot_product / (magnitude_ab * magnitude_bc))
+        angle_degrees = np.degrees(angle_radians)
+
+        return angle_degrees
+    
     def video_to_image(self):
         sides = ['Right', 'Left']
+
+        angles_dict = {'Right':{}, 'Left': {}}
 
         for side in sides:
             video_path = f'Data_process/{side}_sample.mp4'
@@ -439,6 +538,19 @@ class Loading_screen(ttk.Frame):
                     right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
                     right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
 
+                    if side == 'Right':
+                        hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
+                        knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
+                        ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
+                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
+                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
+                    else:
+                        hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
+                        knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
+                        ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
+                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
+                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+
                     if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
                         x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
                         y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
@@ -477,87 +589,38 @@ class Loading_screen(ttk.Frame):
                             file_path = os.path.join(output_folder, file_name)
                             cv2.imwrite(file_path, imgWhite)
 
+                            #calculate and save angle of hips, knees, and ankle in a dictionary
+                            hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
+                            knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
+                            ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
+                            angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
+
                 current_percent = int(round((frame_number / total_frames) * 100))
-                self.percent_label.config(text=f"{side} preprocessing: {current_percent}%")
+                self.percent_label.config(text=f"{side} side, preprocessing images: {current_percent}%")
                 
             # Release resources after processing each video
             cap.release()
             cv2.destroyAllWindows()
 
-        # After the video processing is done, change the frame to Done_Analyzing
-        self.master.change_frame(self, Done_Analyzing)
-    
-class Done_Analyzing(ttk.Frame):
-    def __init__(self, parent, style):
-        '''
-        This frame will analyze the images using DCNN hashmap from Loading_screen merge with hashmap of Done_analyzing
-        '''
-        super().__init__(parent)
-        self.style = style
+        # After the video processing is done, start processing images
+        self.process_images(angles_dict)
 
-        # Frames
-        self.analyzing_frame = ttk.Frame(self)
-        self.analyzing_frame.pack(fill='both', expand=True)
-
-        self.percent_label = ttk.Label(self.analyzing_frame, text="", anchor='center', justify='center', font=('Arial', 24))
-        self.percent_label.pack(fill='both', expand=True)
-
-        # Start the video_to_image method in a separate thread
-        threading.Thread(target=self.process_images).start()
-
-    def process_images(self):
+    def process_images(self, angles_dic):
         # Load models for Left and Right
         self.left_model = self.load_model_for_side('Left')
         self.right_model = self.load_model_for_side('Right')
+        self.angles_dict = angles_dic
 
         # Process images for Left and Right
-        self.left_phase_frames = self.process_images_for_side('Left', self.left_model)
-        self.right_phase_frames = self.process_images_for_side('Right', self.right_model)
+        self.left_phase_frames = self.process_images_for_side('Left', self.left_model, self.angles_dict)
+        self.right_phase_frames = self.process_images_for_side('Right', self.right_model, self.angles_dict)
 
+        # Switch to the table frame for further actions
         self.table_frame()
 
-    def load_model_for_side(self, side):
-        return load_model(f'Data Inputs/models/{side}_10_Pat_New2.h5')
-
-    def process_images_for_side(self, side, model):
-        test_data_dir = f'Data_process/{side}'
-        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
-
-        # Exclude the first 10 and last 10 frames
-        image_files = image_files[5:-5]
-
-        phase_frames = {phase_num: {} for phase_num in range(1, 9)}
-
-        total_files = len(image_files)
-        for index, image_file in enumerate(image_files):
-            if image_file.endswith('.jpg'):
-                frame_num = int(os.path.splitext(image_file)[0])
-                image_path = os.path.join(test_data_dir, image_file)
-                img = cv2.imread(image_path)
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                resize = cv2.resize(img_rgb, (256, 256))
-                normalized_img = resize / 255.0
-                yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
-                predicted_class = int(np.argmax(yhat_single, axis=1))
-                phase_frames[predicted_class + 1][frame_num] = {
-                    'frame_name': f'frame {frame_num}',
-                    'image_path': image_path,
-                    'rom_h': 'sample',
-                    'rom_k': 'sample',
-                    'rom_a': 'sample',
-                    'insole': 'sample',
-                }
-                current_percent = int(round((index / total_files) * 100))
-                self.update_percent_label(side, current_percent)
-
-        return phase_frames
-
-    def update_percent_label(self, side, percent):
-        self.percent_label.config(text=f"{side} analyzing data: {percent}%")
-        self.percent_label.update_idletasks()
-
     def table_frame(self):
-        self.analyzing_frame.pack_forget()
+        # Clear existing widgets from loading_screen
+        self.loading_screen.pack_forget()
 
         # Create a Combobox to select the side (Left or Right)
         self.side_var = tk.StringVar()
@@ -597,7 +660,7 @@ class Done_Analyzing(ttk.Frame):
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
 
         # Make the canvas scrollable with the mouse wheel
-        self.canvas.bind('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-1*(event.delta/120)), "units"))
+        self.canvas.bind('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units"))
 
         # Create a frame for the table-like structure
         self.table_frame = tk.Frame(self.scrollable_frame)
@@ -606,6 +669,41 @@ class Done_Analyzing(ttk.Frame):
     def send_data(self):
         messagebox.showinfo("Sent data", "Data Sent to Website!")
         self.master.change_frame(self, Again)
+
+    def load_model_for_side(self, side):
+        return load_model(f'Data Inputs/models/{side}_10_Pat_New2.h5')
+
+    def process_images_for_side(self, side, model, angles_dict):
+        test_data_dir = f'Data_process/{side}'
+        image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
+        self.angles_dict = angles_dict
+
+        # Exclude the first 10 and last 10 frames
+        image_files = image_files[10:-10]
+
+        phase_frames = {phase_num: {} for phase_num in range(1, 9)}
+
+        for index, image_file in enumerate(image_files):
+            if image_file.endswith('.jpg'):
+                frame_num = int(os.path.splitext(image_file)[0])
+                image_path = os.path.join(test_data_dir, image_file)
+                img = cv2.imread(image_path)
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                resize = cv2.resize(img_rgb, (256, 256))
+                normalized_img = resize / 255.0
+                yhat_single = model.predict(np.expand_dims(normalized_img, axis=0))
+                predicted_class = int(np.argmax(yhat_single, axis=1))
+                phase_frames[predicted_class + 1][frame_num] = {
+                    'frame_name': f'frame {frame_num}',
+                    'image_path': image_path,
+                    'rom_h': self.angles_dict[side][frame_num]['hip'],
+                    'rom_k': self.angles_dict[side][frame_num]['knee'],
+                    'rom_a': self.angles_dict[side][frame_num]['ankle'],
+                    'insole': 'sample',
+                }
+                current_percent = int(round((index / len(image_files)) * 100))
+                self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")
+        return phase_frames
 
     def update_table(self):
         current_side = self.side_var.get()
@@ -703,6 +801,7 @@ class Again(ttk.Frame):
         self.master.destroy()
 
 if __name__ == "__main__":
-    app = RefApp((1920, 1080))
+    app = RefApp((1280, 720))
     app.state('normal')
+    # app.attributes('-fullscreen', True)
     app.mainloop()

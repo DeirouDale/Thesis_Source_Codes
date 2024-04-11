@@ -27,6 +27,8 @@ class RefApp(tk.Tk):
         self.side_flag = 'None'
         self.current_patient = 'None'
 
+        self.frame_numbers_insole = {'Left': {}, 'Right': {}}
+
         # Title Frame
         self.title_frame = Title(self, self.style)
         self.title_frame.pack(fill="both", expand=True)
@@ -86,59 +88,10 @@ class Title(ttk.Frame):
         label_title.grid(row=1, column=0)
         enter_btn.pack(fill="both", expand=True)
 
-'''
-CREATE NEW FRAME FOR LOGIN
-Create database containing user accounts and client accounts
-'''
-
-'''
-CREATE NEW FRAME FOR REGISTRATION OF USER
-insert info to database
-
-'''
-
-'''
-CREATE NEW FRAME FOR REGISTRATION OF CLIENTS
-insert info to database
-
-'''
-'''
-
-CREATE NEW FRAME FOR MENU:
-when navigating menu there should be an option to go to
-start_assessment
-Data saved or Records
-
-then create a navigation frame at the side for easy navigation 
-
-'''
-
-'''
-CREATE NEW FRAME FOR MONITORING DATA
-create CRUD style navigation
-'''
-
-'''
-CREATE NEW FRAME FOR TABLE
-make client info, and panel title as inputs or whichever is better
-retrieve datra from database to create table
-show table
-create option to print table contents
-'''
 class Start_Assessment(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
-        '''
-        Frame for checking if there is an internet connection or not
-        Check if client number is in the local database
-        If client number is in database there should be a window pop up asking if the client number you entered is the correct client
-        example:
 
-        Client: *number*
-        Name: Ismael Gwapo
-
-        Proceed | Change
-        '''
         self.style = style
 
         self.columnconfigure(0, weight=1)
@@ -205,17 +158,10 @@ class Side_Cam(ttk.Frame):
         self.assessment_state = 0
         self.assessment_state_text = 'None'
 
-        '''
-        
-        =============================================== HERE ARE THE NEW VALUES ADDED
-        
-        '''
         self.esp1_sensor_data = []
         self.flag_connected = 0
         
         self.frame_number = 0
-        self.frame_numbers_left = {}
-        self.frame_numbers_right = {}
         
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Reduced frame width
@@ -260,7 +206,12 @@ class Side_Cam(ttk.Frame):
         #change from print to append
     def callback_esp32_sensor1(self, client, userdata, msg):
         print(str(msg.payload.decode('utf-8'))," ",self.frame_number)
-        self.esp1_sensor_data.append([str(msg.payload.decode('utf-8')),self.frame_number])
+        
+        # self.esp1_sensor_data.append([str(msg.payload.decode('utf-8')),self.frame_number])
+
+        # this is where I would save the esp data to dictionary where in the key is frame and the out is esp, example: {55: espdata}
+        self.receive_insole(str(msg.payload.decode('utf-8')))
+
     def callback_esp32_sensor2(self, client, userdata, msg):
         print('ESP sensor2 data: ', str(msg.payload.decode('utf-8')))
 
@@ -389,22 +340,17 @@ class Side_Cam(ttk.Frame):
                 self.out.release()
                 self.out = None
 
-    '''
-    
-        CHECK THIS FOR SYNC ESP DATA TO FRAME
-    
-    '''
-    def receive_insole(self):
+    def receive_insole(self, espdata):
         
         if self.recording:
             if self.assessment_state == 1 or self.assessment_state == 6:
                 self.frame_number += 1
-                self.frame_numbers_left[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
+                self.master.frame_numbers_insole['Left'][self.frame_number] = espdata
                 print(f"Left: {self.frame_number}")
                 
             else:
                 self.frame_number += 1
-                self.frame_numbers_right[self.frame_number] = self.frame_number #======================================CHANGE TO = INSOLE TUPPLE
+                self.master.frame_numbers_insole['Right'][self.frame_number] = espdata
                 print(f"Right: {self.frame_number}")
                     
 
@@ -686,7 +632,7 @@ class Process_Table(ttk.Frame):
                     'rom_h': self.angles_dict[side][frame_num]['hip'],
                     'rom_k': self.angles_dict[side][frame_num]['knee'],
                     'rom_a': self.angles_dict[side][frame_num]['ankle'],
-                    'insole': 'sample',
+                    'insole': self.master.frame_numbers_insole[side][frame_num],
                 }
                 current_percent = int(round((index / len(image_files)) * 100))
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")

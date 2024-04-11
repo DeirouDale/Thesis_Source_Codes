@@ -26,6 +26,7 @@ class RefApp(tk.Tk):
         #side_flag
         self.side_flag = 'None'
         self.current_patient = 'None'
+        self.side_state = {'Right': 0, 'Left':0}
 
         self.frame_numbers_insole = {'Left': {}, 'Right': {}}
 
@@ -168,6 +169,7 @@ class Side_Cam(ttk.Frame):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Reduced frame height
         self.recording = False
         self.out = None
+        self.fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
 
         # Frames
         self.top_frame = ttk.Frame(self)
@@ -204,6 +206,7 @@ class Side_Cam(ttk.Frame):
 
         # a callback functions 
         #change from print to append
+
     def callback_esp32_sensor1(self, client, userdata, msg):
         print(str(msg.payload.decode('utf-8'))," ",self.frame_number)
         
@@ -236,63 +239,66 @@ class Side_Cam(ttk.Frame):
         self.choose_side_btn1.columnconfigure((0,1), weight=1)
         self.choose_side_btn1.rowconfigure(0, weight=1)
 
-        left_btn = ttk.Button(self.choose_side_btn1, text="Start Left Side", command= lambda: self.change_button(1))
-        right_btn = ttk.Button(self.choose_side_btn1, text="Start Right Side", command= lambda: self.change_button(2))
+        left_btn = ttk.Button(self.choose_side_btn1, text="Start Left Side", command= lambda: self.change_button('left'))
+        right_btn = ttk.Button(self.choose_side_btn1, text="Start Right Side", command= lambda: self.change_button('right'))
 
         left_btn.grid(row=0, column=0, sticky='nsew')
         right_btn.grid(row=0, column=1, sticky='nsew')
     
     def change_button(self, state):
         self.assessment_state = state
-        if state == 1 or state == 2 or state == 6 or state == 7:
-            
-            if state == 1 or state == 6:
-                self.assessment_state_text = 'Left'
-            else:
-                self.assessment_state_text = 'Right'
+
+        if state == 'right':
+            self.master.side_state['Right'] = 1
+            self.assessment_state_text = 'Right'
 
             self.choose_side_btn1.pack_forget()
-
             self.assessment_state_label.config(text=f"Current Video: {self.assessment_state_text}")
-
             self.record_frame = ttk.Frame(self)
 
             self.record_frame.grid(row=2, column=0, sticky='nsew')
 
             self.record_button = ttk.Button(self.record_frame, text="Start Recording", command=lambda: self.toggle_recording(state))
             self.record_button.pack(fill="both", expand=True)
+        elif state == 'left':
+            self.master.side_state['Left'] = 1
+            self.assessment_state_text = 'Left'
 
-        elif state == 3 or state == 4:
-            if state == 4:
-                self.assessment_state_text = 'Left'
-                second_state = 6
-            else:
-                self.assessment_state_text = 'Right'
-                second_state = 7
-            self.record_button.pack_forget()
-
-            self.choose_side_btn2 = ttk.Frame(self)
-            self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
-
-            self.choose_side_btn2.columnconfigure((0,1), weight=1)
-            self.choose_side_btn2.rowconfigure(0, weight=1)
-
-            side_btn = ttk.Button(self.choose_side_btn2, text=f"Start {self.assessment_state_text} Side", command=lambda: self.change_button(second_state))
-            end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
-
-            side_btn.grid(row=0, column=0, sticky='nsew')
-            end_btn.grid(row=0, column=1, sticky='nsew')
-        else:
-            self.choose_side_btn2.pack_forget()
-
+            self.choose_side_btn1.pack_forget()
             self.assessment_state_label.config(text=f"Current Video: {self.assessment_state_text}")
+            self.record_frame = ttk.Frame(self)
 
-            self.end_frame = ttk.Frame(self)
+            self.record_frame.grid(row=2, column=0, sticky='nsew')
 
-            self.end_frame.grid(row=2, column=0, sticky='nsew')
+            self.record_button = ttk.Button(self.record_frame, text="Start Recording", command=lambda: self.toggle_recording(state))
+            self.record_button.pack(fill="both", expand=True)
+        elif state == 'choose_other':
+            if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
+                self.choose_side_btn2 = ttk.Frame(self)
+                self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
 
-            self.end_btn = ttk.Button(self.end_frame, text="End Video Taking", command=lambda: self.master.change_frame(self, Process_Table))
-            self.end_btn.pack(fill="both", expand=True)
+                self.choose_side_btn2.columnconfigure((0,1), weight=1)
+                self.choose_side_btn2.rowconfigure(0, weight=1)
+
+                side_btn = ttk.Button(self.choose_side_btn2, text=f"Start Left Side", command=lambda: self.change_button('left'))
+                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Title))
+
+                side_btn.grid(row=0, column=0, sticky='nsew')
+                end_btn.grid(row=0, column=1, sticky='nsew')
+            elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
+                self.choose_side_btn2 = ttk.Frame(self)
+                self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
+
+                self.choose_side_btn2.columnconfigure((0,1), weight=1)
+                self.choose_side_btn2.rowconfigure(0, weight=1)
+
+                side_btn = ttk.Button(self.choose_side_btn2, text=f"Start Right Side", command=lambda: self.change_button('right'))
+                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Title))
+
+                side_btn.grid(row=0, column=0, sticky='nsew')
+                end_btn.grid(row=0, column=1, sticky='nsew')
+            elif self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 1:
+                self.master.change_frame(self, Title)
 
     def toggle_recording(self, state):
         try:
@@ -324,15 +330,7 @@ class Side_Cam(ttk.Frame):
                 # Frame Number go back to 0
                 self.frame_number = 0
 
-                if self.out is not None:
-                    self.out.release()
-                    self.out = None
-                if self.assessment_state == 1:
-                    self.change_button(3)
-                elif self.assessment_state == 2:
-                    self.change_button(4)
-                else:
-                    self.change_button(8)
+                self.change_button('choose_other')
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
             # Release resources if an error occurs
@@ -351,41 +349,32 @@ class Side_Cam(ttk.Frame):
                 self.master.frame_numbers_insole['Right'][frame_number] = espdata
                 print(f"Right: {self.frame_number}")
                     
-
     def camera_update_thread(self):
-        # Create the label widget once outside of the loop
         label = ttk.Label(self.webcam_frame)
         label.grid(row=0, column=0, sticky='nsew')
 
-        # Throttle Update Rate
-        FRAME_DELAY = 0.033  # Update frame every ~33 milliseconds (approximately 30 fps)
-        last_frame_time = time.time()
-
-        while True:
-            # Throttle frame updates
-            if time.time() - last_frame_time < FRAME_DELAY:
-                time.sleep(0.001)  # Sleep for 1 ms to avoid busy waiting
-                continue
-
-            last_frame_time = time.time()
-
+        def update_frame():
             ret, frame = self.cap.read()
-
             if ret:
                 photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
                 label.config(image=photo)
                 label.image = photo
-                 
-                # Check if the label widget is still accessible before placing it
+                
                 if label.winfo_exists():
                     label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
                 if self.recording:
                     self.out.write(frame)  
-                    self.frame_number +=1
+                    self.frame_number += 1
 
-            self.webcam_frame.update_idletasks()
-            self.webcam_frame.update()
+                self.webcam_frame.update_idletasks()
+                self.webcam_frame.update()
+            
+            # Schedule the next frame update
+            self.webcam_frame.after(33, update_frame)  # 33 milliseconds ~= 30 fps
+
+        # Start the initial frame update
+        update_frame()
 
     def destroy(self):
         self.cap.release()  

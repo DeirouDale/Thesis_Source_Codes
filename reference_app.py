@@ -318,10 +318,6 @@ class Side_Cam(ttk.Frame):
                 # start a new thread
                 self.client.loop_start()
                 
-                if state == 1 or state == 6:
-                    self.assessment_state_text = 'Left'
-                elif state == 2 or state == 7:
-                    self.assessment_state_text = 'Right'
                 #TODO: update frame numbers here
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'

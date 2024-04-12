@@ -6,6 +6,7 @@ import os
 import numpy as np
 import math 
 import threading
+import mediapipe as mp
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -18,9 +19,9 @@ class RefApp(tk.Tk):
         self.styles()
 
         #side_flag
-        self.side_flag = 'None'
         self.current_patient = 'None'
         self.side_state = {'Right': 0, 'Left':0}
+        self.frame_numbers_insole = {'Left': {}, 'Right': {}}
 
         # Title Frame
         self.title_frame = Side_Cam(self, self.style)
@@ -100,15 +101,17 @@ class Side_Cam(ttk.Frame):
         # Frames
         self.top_frame = ttk.Frame(self)
         self.webcam_frame = ttk.Frame(self)
-        self.choose_side_btn1 = ttk.Frame(self)
         
         self.top_frame.grid(row=0, column=0, sticky='nsew')
         self.webcam_frame.grid(row=1, column=0, sticky='nsew')
-        self.choose_side_btn1.grid(row=2, column=0, sticky='nsew')
+
+        self.record_frame = ttk.Frame(self)
+        self.record_frame.grid(row=2, column=0, sticky='nsew')
+        self.record_button = ttk.Button(self.record_frame, text="Start Recording", command=lambda: self.toggle_recording())
+        self.record_button.pack(fill="both", expand=True)
 
         self.top_frame_widget()
         self.camera_update()
-        self.choose_side_btn_widget()
 
     def top_frame_widget(self):
         self.top_frame.rowconfigure(0, weight=1)
@@ -120,89 +123,20 @@ class Side_Cam(ttk.Frame):
         self.current_patient_label.grid(row=0, column=0)
         self.assessment_state_label.grid(row=0, column=1)
     
-    def choose_side_btn_widget(self):
-        self.choose_side_btn1.columnconfigure((0,1), weight=1)
-        self.choose_side_btn1.rowconfigure(0, weight=1)
-
-        left_btn = ttk.Button(self.choose_side_btn1, text="Start Left Side", command= lambda: self.change_button('left'))
-        right_btn = ttk.Button(self.choose_side_btn1, text="Start Right Side", command= lambda: self.change_button('right'))
-
-        left_btn.grid(row=0, column=0, sticky='nsew')
-        right_btn.grid(row=0, column=1, sticky='nsew')
-    
-    def change_button(self, state):
-        self.assessment_state = state
-
-        if state == 'right':
-            self.master.side_state['Right'] = 1
-            self.assessment_state_text = 'Right'
-
-            self.choose_side_btn1.pack_forget()
-            self.assessment_state_label.config(text=f"Current Video: {self.assessment_state_text}")
-            self.record_frame = ttk.Frame(self)
-
-            self.record_frame.grid(row=2, column=0, sticky='nsew')
-
-            self.record_button = ttk.Button(self.record_frame, text="Start Recording", command=lambda: self.toggle_recording(state))
-            self.record_button.pack(fill="both", expand=True)
-        elif state == 'left':
-            self.master.side_state['Left'] = 1
-            self.assessment_state_text = 'Left'
-
-            self.choose_side_btn1.pack_forget()
-            self.assessment_state_label.config(text=f"Current Video: {self.assessment_state_text}")
-            self.record_frame = ttk.Frame(self)
-
-            self.record_frame.grid(row=2, column=0, sticky='nsew')
-
-            self.record_button = ttk.Button(self.record_frame, text="Start Recording", command=lambda: self.toggle_recording(state))
-            self.record_button.pack(fill="both", expand=True)
-        elif state == 'choose_other':
-            if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
-                self.choose_side_btn2 = ttk.Frame(self)
-                self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
-
-                self.choose_side_btn2.columnconfigure((0,1), weight=1)
-                self.choose_side_btn2.rowconfigure(0, weight=1)
-
-                side_btn = ttk.Button(self.choose_side_btn2, text=f"Start Left Side", command=lambda: self.change_button('left'))
-                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Title))
-
-                side_btn.grid(row=0, column=0, sticky='nsew')
-                end_btn.grid(row=0, column=1, sticky='nsew')
-            elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
-                self.choose_side_btn2 = ttk.Frame(self)
-                self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
-
-                self.choose_side_btn2.columnconfigure((0,1), weight=1)
-                self.choose_side_btn2.rowconfigure(0, weight=1)
-
-                side_btn = ttk.Button(self.choose_side_btn2, text=f"Start Right Side", command=lambda: self.change_button('right'))
-                end_btn = ttk.Button(self.choose_side_btn2, text="End Video Taking", command=lambda: self.master.change_frame(self, Title))
-
-                side_btn.grid(row=0, column=0, sticky='nsew')
-                end_btn.grid(row=0, column=1, sticky='nsew')
-            elif self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 1:
-                self.master.change_frame(self, Title)
-        
-    def toggle_recording(self, state):
+    def toggle_recording(self):
         if not self.recording:
             self.recording = True
             self.record_button.config(text="Stop Recording")
             
-            if state == 1 or state == 6:
-                self.assessment_state_text = 'Left'
-            elif state == 2 or state == 7:
-                self.assessment_state_text = 'Right'
-            
-            self.output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
+            self.output_filename = f'Data_process/Troubleshoot.mp4'
             self.out = cv2.VideoWriter(self.output_filename, self.fourcc, 10.0, (1280, 720))
+            
             
         else:
             self.recording = False
             self.record_button.config(text="Start Recording")
             self.out.release()
-            self.change_button('choose_other')
+            self.master.change_frame(self, Process_Table)
             
     def camera_update(self):
         ret, frame = self.cap.read()
@@ -222,6 +156,175 @@ class Side_Cam(ttk.Frame):
     def destroy(self):
         self.cap.release()  
         super().destroy()
+
+class Process_Table(ttk.Frame):
+    def __init__(self, parent, style):
+        super().__init__(parent)
+        self.style = style
+        self.left_model = None
+        self.right_model = None
+        self.left_phase_frames = None
+        self.right_phase_frames = None
+        self.side_frame_numbers = {'Left': {}, 'Right': {}}
+        self.image_dict = {}
+
+        self.loading_screen = ttk.Frame(self)
+        self.loading_screen.pack(fill='both', expand=True)
+
+        self.percent_label = ttk.Label(self.loading_screen, text="", anchor='center', justify='center', font=('Arial', 24))
+        self.percent_label.pack(fill='both', expand=True)
+
+        # Start the video_to_image method in a separate thread
+        threading.Thread(target=self.video_to_image).start()
+    
+    def video_to_image(self):
+
+        video_path = f'Data_process/Left_sample.mp4' #video path
+        output_folder = f'Data_process/Sync'
+        os.makedirs(output_folder, exist_ok=True)
+
+        mp_pose = mp.solutions.pose
+        pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            print("Error: Could not open the video file.")
+            exit()
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        for frame_number in range(1, total_frames + 1):
+            ret, frame = cap.read()
+
+            if not ret:
+                print(f"Error: Could not read frame {frame_number}.")
+                break
+
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            results = pose.process(frame_rgb)
+
+            if results.pose_landmarks:
+                mp_drawing = mp.solutions.drawing_utils
+                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+
+                landmarks = results.pose_landmarks.landmark
+
+                left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+                left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+                left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
+
+                right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+                right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+                right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+
+                if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
+                    x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
+                    y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
+                    x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
+                    y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
+
+                    bounding_box_content = frame[y_min:y_max, x_min:x_max]
+
+                    imgWhite = np.ones((500, 500, 3), np.uint8) * 255
+
+                    # Resize and adjust the bounding box content
+                    if bounding_box_content.size > 0:
+                        content_height, content_width, _ = bounding_box_content.shape
+                        aspect_ratio = content_height / content_width
+
+                        if aspect_ratio > 1:
+                            k = 500 / content_height
+                            wCal = math.ceil(k * content_width)
+                            imgResize = cv2.resize(bounding_box_content, (wCal, 500))
+                            wGap = math.ceil((500 - wCal) / 2)
+                            if imgResize.shape[1] < 500:
+                                imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                            else:
+                                imgWhite[:, :] = imgResize[:, :500]
+                        else:
+                            k = 500 / content_width
+                            hCal = math.ceil(k * content_height)
+                            imgResize = cv2.resize(bounding_box_content, (500, hCal))
+                            hGap = math.ceil((500 - hCal) / 2)
+                            if imgResize.shape[0] < 500:
+                                imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                            else:
+                                imgWhite[:, :] = imgResize[:500, :]
+
+                        file_name = f"{frame_number}.jpg"
+                        file_path = os.path.join(output_folder, file_name)
+                        cv2.imwrite(file_path, imgWhite)
+
+                        self.image_dict[frame_number] = {'Frame': frame_number,
+                                                         'Image': file_path,
+                                                         'Insole': '000'
+                                                         }
+
+            current_percent = int(round((frame_number / total_frames) * 100))
+            self.percent_label.config(text=f"preprocessing images: {current_percent}%")
+        
+        # Forget the label after processing is done
+        self.loading_screen.pack_forget()
+        self.display_table()
+
+        # Release resources after processing all frames
+        cap.release()
+        cv2.destroyAllWindows()
+
+    def display_table(self):
+        # Create a new frame for the table
+        table_frame = ttk.Frame(self)
+        table_frame.pack(fill='both', expand=True)
+
+        # Create a Canvas widget to hold the labels
+        canvas = tk.Canvas(table_frame)
+        canvas.pack(side='left', fill='both', expand=True)
+
+        # Create a Frame inside the canvas to hold the labels
+        inner_frame = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=inner_frame, anchor='nw')
+
+        # Create labels for column headings
+        frame_heading = ttk.Label(inner_frame, text='Frame Number', font=('Arial', 12, 'bold'))
+        frame_heading.grid(row=0, column=0, padx=5, pady=5)
+
+        image_heading = ttk.Label(inner_frame, text='Image', font=('Arial', 12, 'bold'))
+        image_heading.grid(row=0, column=1, padx=5, pady=5)
+
+        insole_heading = ttk.Label(inner_frame, text='Insole', font=('Arial', 12, 'bold'))
+        insole_heading.grid(row=0, column=2, padx=5, pady=5)
+
+        # Populate the table using labels
+        row = 1
+        for frame_number, data in self.image_dict.items():
+            frame_label = ttk.Label(inner_frame, text=str(data['Frame']), font=('Arial', 10))
+            frame_label.grid(row=row, column=0, padx=5, pady=5)
+
+            # Open and display the image
+            img = Image.open(data['Image'])
+            img = img.resize((250, 250))  # Resize image if needed
+            img_tk = ImageTk.PhotoImage(img)
+            image_label = ttk.Label(inner_frame, image=img_tk)
+            image_label.image = img_tk  # Keep a reference to the image
+            image_label.grid(row=row, column=1, padx=5, pady=5)
+
+            insole_label = ttk.Label(inner_frame, text=str(data['Insole']), font=('Arial', 10))
+            insole_label.grid(row=row, column=2, padx=5, pady=5)
+
+            row += 1
+
+        # Add a scrollbar
+        scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=canvas.yview)
+        scrollbar.pack(side='right', fill='y')
+        canvas.config(yscrollcommand=scrollbar.set)
+
+        # Update canvas scroll region
+        inner_frame.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox('all'))
+
+
 
 
 if __name__ == "__main__":

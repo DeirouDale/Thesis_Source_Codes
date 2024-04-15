@@ -91,6 +91,8 @@ class Start_Assessment(ttk.Frame):
 
         self.style = style
 
+        self.master.side_state = {'Right': 0, 'Left':0}
+
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=3)
         self.rowconfigure(1, weight=1)
@@ -132,16 +134,6 @@ class Start_Assessment(ttk.Frame):
         patient_label_entry.grid(row=0, column=0)
         self.patient_entry.grid(row=0, column=1)
     
-    def clear_folder(self, folder_path):
-        # List all items in the folder
-        for item in os.listdir(folder_path):
-            item_path = os.path.join(folder_path, item)
-            
-            # Check if it's a file or directory
-            if os.path.isfile(item_path):
-                # If it's a file, remove it
-                os.remove(item_path)
-
     def patient_database(self):
         patient_nums = ['24-00001', '24-00002', '24-00003', '24-00004', '24-00005', '']
         entry_num = self.patient_entry.get()
@@ -408,6 +400,16 @@ class Process_Table(ttk.Frame):
         # Start the video_to_image method in a separate thread
         threading.Thread(target=self.video_to_image).start()
 
+    def clear_folder(self, folder_path):
+        # List all items in the folder
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            
+            # Check if it's a file or directory
+            if os.path.isfile(item_path):
+                # If it's a file, remove it
+                os.remove(item_path)
+
     def calculate_angle(self, a, b, c):
         ab = b - a
         bc = c - b
@@ -425,6 +427,8 @@ class Process_Table(ttk.Frame):
 
         angles_dict = {'Right': {}, 'Left': {}}
         side = ''
+        self.clear_folder('Data_process/Left')
+        self.clear_folder('Data_process/Right')
 
         if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
             side = 'Right'

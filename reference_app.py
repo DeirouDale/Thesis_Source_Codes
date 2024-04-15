@@ -10,7 +10,7 @@ from tensorflow.keras.models import load_model
 import threading
 import paho.mqtt.client as mqtt
 import csv
-
+import time
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -163,20 +163,20 @@ class Side_Cam(ttk.Frame):
         self.rowconfigure(1, weight=10)
         self.rowconfigure(2, weight=1)
 
-        self.assessment_state = 0
+        self.assessment_state = ''
         self.assessment_state_text = 'None'
 
         self.esp1_sensor_data = []
         self.flag_connected = 0
         
         self.frame_number = 0
-        
+        self.nft =0
+        self.pft =0
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Reduced frame width
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Reduced frame height
         self.recording = False
         self.out = None
-        self.fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
 
         # Frames
         self.top_frame = ttk.Frame(self)
@@ -344,13 +344,13 @@ class Side_Cam(ttk.Frame):
     def receive_insole(self, espdata, frame_number):
         
         if self.recording:
-            if self.assessment_state == 1 or self.assessment_state == 6:
+            if self.assessment_state == 'left':
                 self.master.frame_numbers_insole['Left'][frame_number] = espdata
-                print(f"Left: {self.frame_number}")
+                print(f"Left: {self.frame_number} : {espdata}")
                 
             else:
                 self.master.frame_numbers_insole['Right'][frame_number] = espdata
-                print(f"Right: {self.frame_number}")
+                print(f"Right: {self.frame_number} : {espdata}")
                     
     def camera_update_thread(self):
         label = ttk.Label(self.webcam_frame)
@@ -369,7 +369,13 @@ class Side_Cam(ttk.Frame):
                 if self.recording:
                     self.out.write(frame)  
                     self.frame_number += 1
-
+                #see current fps
+                #self.nft = time.time()
+                #self.fps = 1/(self.nft-self.pft)
+                #self.pft = self.nft
+                #self.fps = int(self.fps)
+                #print(self.fps)
+                #see current fps end
                 self.webcam_frame.update_idletasks()
                 self.webcam_frame.update()
             
@@ -742,19 +748,21 @@ class Process_Table(ttk.Frame):
 
                 # Set default values for angles if key is not found
                 try:
+                    insole = self.master.frame_numbers_insole[side][frame_num]
                     rom_h = self.angles_dict[side][frame_num]['hip']
                     rom_k = self.angles_dict[side][frame_num]['knee']
                     rom_a = self.angles_dict[side][frame_num]['ankle']
                 except KeyError:
                     rom_h = rom_k = rom_a = 0
+                    insole = '000'
 
                 phase_frames[predicted_class + 1][frame_num] = {
                     'frame_name': f'frame {frame_num}',
                     'image_path': image_path,
                     'rom_h': rom_h,
                     'rom_k': rom_k,
-                    'rom_a': rom_a,
-                    'insole': 'Sample'
+                    'rom_a': frame_num,
+                    'insole': insole
                 }
                 current_percent = int(round((index / len(image_files)) * 100))
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")

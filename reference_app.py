@@ -187,8 +187,9 @@ class Side_Cam(ttk.Frame):
 
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
-        self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
-        self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
+        #self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
+        #self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
+        #placed into left/right logic
         self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
         self.client_subscriptions(self.client)
     #use only for mqtt here 
@@ -203,9 +204,15 @@ class Side_Cam(ttk.Frame):
 
         # a callback functions 
         #change from print to append
-
+    def right_focus_sensor(self):
+        self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
+        self.client.message_callback_remove('esp32/sensor2')
+    def left_focus_sensor(self):
+        self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
+        self.client.message_callback_remove('esp32/sensor1')
+                    
     def callback_esp32_sensor1(self, client, userdata, msg):
-        print(str(msg.payload.decode('utf-8'))," ",self.frame_number)
+        print("RSensor: ",str(msg.payload.decode('utf-8'))," ",self.frame_number)
         
         # self.esp1_sensor_data.append([str(msg.payload.decode('utf-8')),self.frame_number])
 
@@ -213,8 +220,9 @@ class Side_Cam(ttk.Frame):
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
 
     def callback_esp32_sensor2(self, client, userdata, msg):
-        print('ESP sensor2 data: ', str(msg.payload.decode('utf-8')))
-
+        print("LSensor: ",str(msg.payload.decode('utf-8'))," ",self.frame_number)
+        self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
+        
     def callback_rpi_broadcast(self, client, userdata, msg):
         print('RPi Broadcast message:  ', str(msg.payload.decode('utf-8')))
 
@@ -248,7 +256,8 @@ class Side_Cam(ttk.Frame):
         if state == 'right':
             self.master.side_state['Right'] = 1
             self.assessment_state_text = 'Right'
-
+            
+            self.right_focus_sensor()
             self.choose_side_btn1.pack_forget()
             self.assessment_state_label.config(text=f"Current Video: {self.assessment_state_text}")
             self.record_frame = ttk.Frame(self)
@@ -264,7 +273,9 @@ class Side_Cam(ttk.Frame):
         elif state == 'left':
             self.master.side_state['Left'] = 1
             self.assessment_state_text = 'Left'
-
+            
+            self.left_focus_sensor()
+            
             self.choose_side_btn1.pack_forget()
             self.assessment_state_label.config(text=f"Current Video: {self.assessment_state_text}")
             self.record_frame = ttk.Frame(self)
@@ -281,7 +292,7 @@ class Side_Cam(ttk.Frame):
             if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
                 self.choose_side_btn2 = ttk.Frame(self)
                 self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
-
+                self.right_focus_sensor()
                 self.choose_side_btn2.columnconfigure((0,1), weight=1)
                 self.choose_side_btn2.rowconfigure(0, weight=1)
 
@@ -293,7 +304,7 @@ class Side_Cam(ttk.Frame):
             elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
                 self.choose_side_btn2 = ttk.Frame(self)
                 self.choose_side_btn2.grid(row=2, column=0, sticky='nsew')
-
+                self.left_focus_sensor()
                 self.choose_side_btn2.columnconfigure((0,1), weight=1)
                 self.choose_side_btn2.rowconfigure(0, weight=1)
 
@@ -541,14 +552,10 @@ class Process_Table(ttk.Frame):
         
     def video_to_image(self):
 
-        if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
+        if self.master.side_state['Right'] == 1:
             self.crop_vid('Right')
-        elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
+        if self.master.side_state['Left'] == 1:
             self.crop_vid('Left')
-        else:
-            sides = ['Right', 'Left']
-            for side in sides:
-                self.crop_vid(side)
 
         # After the video processing is done, start processing images
         self.process_images()

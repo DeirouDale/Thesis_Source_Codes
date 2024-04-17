@@ -4,13 +4,25 @@ from PIL import Image, ImageTk
 import cv2
 import mediapipe as mp
 import os
-import numpy as np
+import numpy as np #better math module
 import math 
 from tensorflow.keras.models import load_model
 import threading
 import paho.mqtt.client as mqtt
 import csv
 import time
+import mysql.connector 
+import shutil #move files
+from datetime import datetime #get date
+
+mydb = mysql.connector.connect(
+	host = "localhost",
+	user= "gaitrpi",
+	password = "gait123",
+	database="gaitdata")
+
+mycursor = mydb.cursor()
+
 
 class RefApp(tk.Tk):
     def __init__(self, size):
@@ -23,6 +35,7 @@ class RefApp(tk.Tk):
         self.styles()
 
         self.current_patient = 'None'
+        self.current_patient_id = ''
         self.side_state = {'Right': 0, 'Left':0}
         self.frame_numbers_insole = {'Left': {}, 'Right': {}}
 
@@ -135,14 +148,23 @@ class Start_Assessment(ttk.Frame):
         self.patient_entry.grid(row=0, column=1)
     
     def patient_database(self):
-        patient_nums = ['24-00001', '24-00002', '24-00003', '24-00004', '24-00005', '']
-        entry_num = self.patient_entry.get()
-        if entry_num in patient_nums:
-            self.master.current_patient = entry_num
+        #insert sql
+        global mycursor
+        mycursor.execute("SELECT name from patient_details where client_id = %s",(self.patient_entry.get(),))
+        entry_num =mycursor.fetchone()
+        if entry_num is not None:
+            #if query returns value
+            
+            self.master.current_patient = entry_num[0]
+            self.master.current_patient_id = self.patient_entry.get()
             self.master.change_frame(self, Side_Cam)
         else:
+            #if query returns none
             messagebox.showinfo("Application Database Message", "Patient not in device list, refresh or check website")
-
+         
+        
+           
+          
 class Side_Cam(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
@@ -234,7 +256,7 @@ class Side_Cam(ttk.Frame):
         self.top_frame.rowconfigure(0, weight=1)
         self.top_frame.columnconfigure((0,1), weight=1)
 
-        self.current_patient_label = ttk.Label(self.top_frame, text="Current Patient: None", font=('Arial', 20))  # Changed to 'None'
+        self.current_patient_label = ttk.Label(self.top_frame, text=("Current Patient:"+self.master.current_patient), font=('Arial', 20))  # Changed to 'None'
         self.assessment_state_label = ttk.Label(self.top_frame, text=f"Current Video: {self.assessment_state_text}", font=('Arial', 20))
 
         self.current_patient_label.grid(row=0, column=0)
@@ -404,10 +426,10 @@ class Process_Table(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
         self.style = style
-        self.left_model = None
-        self.right_model = None
-        self.left_phase_frames = None
-        self.right_phase_frames = None
+        self.left_model = []
+        self.right_model = []
+        self.left_phase_frames = []
+        self.right_phase_frames = []
         self.side_frame_numbers = {'Left': {}, 'Right': {}}
         self.angles_dict = {'Right': {}, 'Left': {}}
         print(f"Left: {self.master.side_state['Left']}")
@@ -640,7 +662,8 @@ class Process_Table(ttk.Frame):
         self.table_frame.pack()
 
     def send_data(self):
-        messagebox.showinfo("Sent data", "Data Sent to Website!")
+        self.store_to_db()
+        messagebox.showinfo("Sent data", "Data Saved")
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
@@ -649,7 +672,6 @@ class Process_Table(ttk.Frame):
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'
         image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
-
         # Exclude the first 10 and last 10 frames
         image_files = image_files[10:-10]
 
@@ -673,16 +695,18 @@ class Process_Table(ttk.Frame):
                     rom_k = self.angles_dict[side][frame_num]['knee']
                     rom_a = self.angles_dict[side][frame_num]['ankle']
                 except KeyError:
-                    rom_h = rom_k = rom_a = 0
-                    insole = '000'
+                    rom_h = rom_k = rom_a = 'Unknown'
+                    insole = 'Unknown'
 
                 phase_frames[predicted_class + 1][frame_num] = {
-                    'frame_name': f'frame {frame_num}',
-                    'image_path': image_path,
+                    'frame_name': frame_num,
+                    'side': side,
+                    'image_path': image_file,
                     'rom_h': rom_h,
                     'rom_k': rom_k,
-                    'rom_a': frame_num,
+                    'rom_a': rom_a,
                     'insole': insole
+                    
                 }
                 current_percent = int(round((index / len(image_files)) * 100))
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")
@@ -691,6 +715,8 @@ class Process_Table(ttk.Frame):
     def update_table(self):
         current_side = self.side_var.get()
         phase_number = int(self.phase_number_var.get())
+        print(self.right_phase_frames)
+        print(self.left_phase_frames)
 
         if current_side == 'Left':
             self.populate_table_frame(self.table_frame, self.left_phase_frames, phase_number)
@@ -703,7 +729,7 @@ class Process_Table(ttk.Frame):
             widget.destroy()
 
         # Define headings
-        headings = ['Frame Image', 'ROM Hips', 'ROM Knees', 'ROM Ankle', 'Insole']
+        headings = ['Frame Image', 'Frame Num', 'ROM Hips', 'ROM Knees', 'ROM Ankle', 'Insole']
 
         # Create labels for headings with font size 20
         for col, heading in enumerate(headings):
@@ -713,12 +739,13 @@ class Process_Table(ttk.Frame):
 
         # Iterate over phase_frames and populate the table-like structure
         for row, (frame_num, frame_info) in enumerate(phase_frames[phase_number].items(), start=1):
-            image_path = frame_info['image_path']
+            
+            image_path = f'Data_process/{frame_info["side"]}/{frame_info["image_path"]}'
             rom_h = frame_info['rom_h']
             rom_k = frame_info['rom_k']
             rom_a = frame_info['rom_a']
             insole = frame_info['insole']
-
+            frame_num = frame_info['frame_name']
             # Display image
             img = Image.open(image_path)
             img.thumbnail((175, 175))  # Resize image if necessary
@@ -728,10 +755,77 @@ class Process_Table(ttk.Frame):
             img_label.grid(row=row, column=0, sticky="nsew")
 
             # Display other information with font size 20
-            tk.Label(table_frame, text=rom_h, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=1, sticky="nsew")
-            tk.Label(table_frame, text=rom_k, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=2, sticky="nsew")
-            tk.Label(table_frame, text=rom_a, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=3, sticky="nsew")
-            tk.Label(table_frame, text=insole, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=4, sticky="nsew")
+            tk.Label(table_frame, text=frame_num, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=1, sticky="nsew")
+            tk.Label(table_frame, text=rom_h, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=2, sticky="nsew")
+            tk.Label(table_frame, text=rom_k, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=3, sticky="nsew")
+            tk.Label(table_frame, text=rom_a, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=4, sticky="nsew")
+            tk.Label(table_frame, text=insole, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=5, sticky="nsew")
+            
+    def store_to_db(self): #only run this once
+        global mycursor,mydb
+        client_id = self.master.current_patient_id
+        #TODO: get date, and determine if an assessment is performed before this one, if no assessment performed on date, set assessment value as 1, RUN ONCE
+        date = datetime.today().strftime('%Y-%m-%d')
+        print(date)
+        sql = "SELECT assessment_num from assessment WHERE date_time=%s ORDER BY assessment_num DESC" #get the highest assessment number 
+        val = (date,)
+        mycursor.execute(sql,val)
+        result = mycursor.fetchone()
+        if result is not None:
+            assessment_num = result[0] + 1
+        else:
+            assessment_num = 1
+        
+        #TODO: move img from data_process to Database folder, directory is as follows, RUN ONCE
+        #DIR: Database/client_id/date(YYYYMMDD)/assessment_num/(Left/Right)/frame_num.jpg
+        target_path = f"Database/{client_id}/{date}/{assessment_num}"
+        #PS: IF directory specified does not exists, create dir
+        if not os.path.exists(target_path):
+            os.makedirs(target_path,exist_ok=True)
+        shutil.move("Data_process/Right",target_path)
+        shutil.move("Data_process/Left",target_path)
+        os.makedirs('Data_process/Right', exist_ok=True)
+        os.makedirs('Data_process/Left', exist_ok=True)
+        print('moved files')
+            
+        #TODO: forloop this shit
+        # Iterate over each row in the table_frame
+        for phase_number in range(1,8):
+            for lmao,(xd, row) in enumerate(self.right_phase_frames[phase_number].items(), start=1):
+                # Extract data from the labels
+                frame = row['frame_name']
+                image = row['image_path']
+                hips = row['rom_h']
+                knees = row['rom_k']
+                ankle =row['rom_a']
+                insole = row['insole']
+                side = row['side']
+                #send data
+                image =target_path+'/'+side+'/'+image
+                sql = "INSERT INTO assessment (client_id, side, date_time, assessment_num, phase, image, frame, hips, knees, ankle, insole) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                val = (client_id,side,date, assessment_num,phase_number,image,frame,hips,knees,ankle,insole)
+                print(val)
+                mycursor.execute(sql,val)
+            for lmao,(xd, row) in enumerate(self.left_phase_frames[phase_number].items(), start=1):
+                # Extract data from the labels
+                frame = row['frame_name']
+                image = row['image_path']
+                hips = row['rom_h']
+                knees = row['rom_k']
+                ankle =row['rom_a']
+                insole = row['insole']
+                side = row['side']
+                #send data
+                image =target_path+'/'+side+'/'+image
+                sql = "INSERT INTO assessment (client_id, side, date_time, assessment_num, phase, image, frame, hips, knees, ankle, insole) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                val = (client_id,side,date, assessment_num,phase_number,image,frame,hips,knees,ankle,insole)
+                print(val)
+                mycursor.execute(sql,val)
+                
+        #commit changes and close
+        mydb.commit()
+   
+    
 
 class Again(ttk.Frame):
     def __init__(self, parent, style):
@@ -781,7 +875,9 @@ class Again(ttk.Frame):
 
     def end_function(self):
         messagebox.showinfo("Clost Tab", "Thank you for using the application")
+        mydb.close() #end mydb connection
         self.master.destroy()
+        
 
 if __name__ == "__main__":
     app = RefApp((1280, 720))

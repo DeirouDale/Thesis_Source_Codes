@@ -38,6 +38,30 @@ class RefApp(tk.Tk):
         self.current_patient_id = ''
         self.side_state = {'Right': 0, 'Left':0}
         self.frame_numbers_insole = {'Left': {}, 'Right': {}}
+        
+        self.image_insole = {'Left': {
+                                '000' : 'Data Inputs/insole_rep/Left/000.png',
+                                '001' : 'Data Inputs/insole_rep/Left/001.png',
+                                '010' : 'Data Inputs/insole_rep/Left/010.png',
+                                '011' : 'Data Inputs/insole_rep/Left/011.png',
+                                '100' : 'Data Inputs/insole_rep/Left/100.png',
+                                '101' : 'Data Inputs/insole_rep/Left/101.png',
+                                '110' : 'Data Inputs/insole_rep/Left/110.png',
+                                '111' : 'Data Inputs/insole_rep/Left/111.png',
+                                'unknown' : 'Data Inputs/insole_rep/Left/unkown.png'
+                            }, 
+                            'Right' : {
+                                '000' : 'Data Inputs/insole_rep/Right/000.png',
+                                '001' : 'Data Inputs/insole_rep/Right/001.png',
+                                '010' : 'Data Inputs/insole_rep/Right/010.png',
+                                '011' : 'Data Inputs/insole_rep/Right/011.png',
+                                '100' : 'Data Inputs/insole_rep/Right/100.png',
+                                '101' : 'Data Inputs/insole_rep/Right/101.png',
+                                '110' : 'Data Inputs/insole_rep/Right/110.png',
+                                '111' : 'Data Inputs/insole_rep/Right/111.png',
+                                'unknown' : 'Data Inputs/insole_rep/Right/unkown.png'
+                            }
+                        }
 
         # Title Frame
         self.title_frame = Title(self, self.style)
@@ -696,7 +720,7 @@ class Process_Table(ttk.Frame):
                     rom_a = self.angles_dict[side][frame_num]['ankle']
                 except KeyError:
                     rom_h = rom_k = rom_a = 'Unknown'
-                    insole = 'Unknown'
+                    insole = 'unknown'
 
                 phase_frames[predicted_class + 1][frame_num] = {
                     'frame_name': frame_num,
@@ -705,7 +729,7 @@ class Process_Table(ttk.Frame):
                     'rom_h': rom_h,
                     'rom_k': rom_k,
                     'rom_a': rom_a,
-                    'insole': insole
+                    'insole': self.master.image_insole[side][insole]
                     
                 }
                 current_percent = int(round((index / len(image_files)) * 100))
@@ -759,7 +783,14 @@ class Process_Table(ttk.Frame):
             tk.Label(table_frame, text=rom_h, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=2, sticky="nsew")
             tk.Label(table_frame, text=rom_k, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=3, sticky="nsew")
             tk.Label(table_frame, text=rom_a, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=4, sticky="nsew")
-            tk.Label(table_frame, text=insole, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=5, sticky="nsew")
+            
+            # Display image
+            img2 = Image.open(insole)
+            img2.thumbnail((175, 175))  # Resize image if necessary
+            img2 = ImageTk.PhotoImage(img2)
+            img_label2 = tk.Label(table_frame, image=img2, borderwidth=1, relief='solid')
+            img_label2.image = img2  # Keep reference to avoid garbage collection
+            img_label2.grid(row=row, column=5, sticky="nsew")
             
     def store_to_db(self): #only run this once
         global mycursor,mydb

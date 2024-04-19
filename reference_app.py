@@ -21,7 +21,7 @@ mydb = mysql.connector.connect(
 	password = "gait123",
 	database="gaitdata")
 
-mycursor = mydb.cursor()
+mycursor = mydb.cursor(buffered=True)
 
 
 class RefApp(tk.Tk):
@@ -38,30 +38,6 @@ class RefApp(tk.Tk):
         self.current_patient_id = ''
         self.side_state = {'Right': 0, 'Left':0}
         self.frame_numbers_insole = {'Left': {}, 'Right': {}}
-        
-        self.image_insole = {'Left': {
-                                '000' : 'Data Inputs/insole_rep/Left/000.png',
-                                '001' : 'Data Inputs/insole_rep/Left/001.png',
-                                '010' : 'Data Inputs/insole_rep/Left/010.png',
-                                '011' : 'Data Inputs/insole_rep/Left/011.png',
-                                '100' : 'Data Inputs/insole_rep/Left/100.png',
-                                '101' : 'Data Inputs/insole_rep/Left/101.png',
-                                '110' : 'Data Inputs/insole_rep/Left/110.png',
-                                '111' : 'Data Inputs/insole_rep/Left/111.png',
-                                'unknown' : 'Data Inputs/insole_rep/Left/unkown.png'
-                            }, 
-                            'Right' : {
-                                '000' : 'Data Inputs/insole_rep/Right/000.png',
-                                '001' : 'Data Inputs/insole_rep/Right/001.png',
-                                '010' : 'Data Inputs/insole_rep/Right/010.png',
-                                '011' : 'Data Inputs/insole_rep/Right/011.png',
-                                '100' : 'Data Inputs/insole_rep/Right/100.png',
-                                '101' : 'Data Inputs/insole_rep/Right/101.png',
-                                '110' : 'Data Inputs/insole_rep/Right/110.png',
-                                '111' : 'Data Inputs/insole_rep/Right/111.png',
-                                'unknown' : 'Data Inputs/insole_rep/Right/unkown.png'
-                            }
-                        }
 
         # Title Frame
         self.title_frame = Title(self, self.style)
@@ -452,8 +428,7 @@ class Process_Table(ttk.Frame):
         self.style = style
         self.left_model = []
         self.right_model = []
-        self.left_phase_frames = []
-        self.right_phase_frames = []
+        self.phase_frames = []
         self.side_frame_numbers = {'Left': {}, 'Right': {}}
         self.angles_dict = {'Right': {}, 'Left': {}}
         print(f"Left: {self.master.side_state['Left']}")
@@ -477,7 +452,7 @@ class Process_Table(ttk.Frame):
             
             # Check if it's a file or directory
             if os.path.isfile(item_path):
-                # If it's a file, remove it
+                # If it's a file,  File "/home/silog/Thesis_Source_Codes/reference_app.py", line 703, in send remove it
                 os.remove(item_path)
 
     def calculate_angle(self, a, b, c):
@@ -609,18 +584,12 @@ class Process_Table(ttk.Frame):
     def process_images(self):
         # Load models for Left and Right
 
-        if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
+        if self.master.side_state['Right'] == 1:
             self.right_model = self.load_model_for_side('Right')
-            self.right_phase_frames = self.process_images_for_side('Right', self.right_model)
-        elif self.master.side_state['Right'] == 0 and self.master.side_state['Left'] == 1:
+            self.process_images_for_side('Right', self.right_model)
+        if self.master.side_state['Left'] == 1:
             self.left_model = self.load_model_for_side('Left')
-            self.left_phase_frames = self.process_images_for_side('Left', self.left_model)
-        else:
-            self.left_model = self.load_model_for_side('Left')
-            self.right_model = self.load_model_for_side('Right')
-            self.right_phase_frames = self.process_images_for_side('Right', self.right_model)
-            self.left_phase_frames = self.process_images_for_side('Left', self.left_model)
-                
+            self.process_images_for_side('Left', self.left_model)
         # Switch to the table frame for further actions
         self.table_frame()
 
@@ -642,7 +611,7 @@ class Process_Table(ttk.Frame):
             # Create a Combobox to select the side (Left or Right)
             self.side_var = tk.StringVar()
             self.side_var.set('Left')  # Default value
-            self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Left', 'Right'], state="readonly")\
+            self.side_selector = ttk.Combobox(self, textvariable=self.side_var, values=['Left', 'Right'], state="readonly")
         
         self.side_selector.pack()
         
@@ -685,9 +654,59 @@ class Process_Table(ttk.Frame):
         self.table_frame = tk.Frame(self.scrollable_frame)
         self.table_frame.pack()
 
-    def send_data(self):
-        self.store_to_db()
-        messagebox.showinfo("Sent data", "Data Saved")
+    def send_data(self): #run ONLY ONCE
+        global mycursor,mydb
+        client_id = self.master.current_patient_id
+        #TODO: get date, and determine if an assessment is performed before this one, if no assessment performed on date, set assessment value as 1, RUN ONCE
+        date = datetime.today().strftime('%Y-%m-%d')
+        print(date)
+        sql = "SELECT assessment_num from assessment WHERE date_time=%s ORDER BY assessment_num DESC" #get the highest assessment number 
+        val = (date,)
+        mycursor.execute(sql,val)
+        result = mycursor.fetchone()
+        if result is not None:
+            assessment_num = result[0] + 1
+        else:
+            assessment_num = 1
+        
+        #TODO: move img from data_process to Database folder, directory is as follows, RUN ONCE
+        #DIR: Database/client_id/date(YYYYMMDD)/assessment_num/(Left/Right)/frame_num.jpg
+        target_path = f"Database/{client_id}/{date}/{assessment_num}"
+        #PS: IF directory specified does not exists, create dir
+        
+        #TODO: forloop this shit
+        # Iterate over each row
+        count = 0
+        for row in self.phase_frames:
+            # Extract data from the labels
+            count = count + 1
+            frame = row['frame_name']
+            image = row['image_path']
+            hips = row['rom_h']
+            knees = row['rom_k']
+            ankle =row['rom_a']
+            insole = row['insole']
+            side = row['side']
+            phase_number = row['phase']
+            #send data
+            image =target_path+'/'+side+'/'+image
+            sql = "INSERT INTO assessment (client_id, side, date_time, assessment_num, phase, image, frame, hips, knees, ankle, insole) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            val = (client_id,side,date, assessment_num,phase_number,image,frame,hips,knees,ankle,insole)
+            print(val)
+            mycursor.execute(sql,val)
+            
+        if not os.path.exists(target_path):
+            os.makedirs(target_path,exist_ok=True)
+        shutil.move("Data_process/Right",target_path)
+        shutil.move("Data_process/Left",target_path)
+        os.makedirs('Data_process/Right', exist_ok=True)
+        os.makedirs('Data_process/Left', exist_ok=True)
+        print('moved files')
+            
+        #commit changes and close
+        mydb.commit()
+        print(f"sent {count} data")
+        messagebox.showinfo(f"Sent data", "Data Saved")
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
@@ -715,39 +734,41 @@ class Process_Table(ttk.Frame):
                 # Set default values for angles if key is not found
                 try:
                     insole = self.master.frame_numbers_insole[side][frame_num]
-                    rom_h = self.angles_dict[side][frame_num]['hip']
-                    rom_k = self.angles_dict[side][frame_num]['knee']
-                    rom_a = self.angles_dict[side][frame_num]['ankle']
                 except KeyError:
-                    rom_h = rom_k = rom_a = 'Unknown'
                     insole = 'unknown'
-
-                phase_frames[predicted_class + 1][frame_num] = {
+                    
+                rom_h = self.try_me(side,frame_num,'hip')
+                rom_k = self.try_me(side,frame_num,'knee')
+                rom_a = self.try_me(side,frame_num,'ankle')
+                
+                self.phase_frames.append({
                     'frame_name': frame_num,
                     'side': side,
+                    'phase':(predicted_class+1),
                     'image_path': image_file,
                     'rom_h': rom_h,
                     'rom_k': rom_k,
                     'rom_a': rom_a,
-                    'insole': self.master.image_insole[side][insole]
-                    
-                }
+                    'insole': insole
+                })
                 current_percent = int(round((index / len(image_files)) * 100))
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")
-        return phase_frames
+    def try_me(self,side,frame_num,joint):
+        try:
+            angle = self.angles_dict[side][frame_num][joint]
+        except KeyError:
+            angle = 'Unknown'
+        return angle
 
     def update_table(self):
         current_side = self.side_var.get()
         phase_number = int(self.phase_number_var.get())
-        print(self.right_phase_frames)
-        print(self.left_phase_frames)
-
         if current_side == 'Left':
-            self.populate_table_frame(self.table_frame, self.left_phase_frames, phase_number)
+            self.populate_table_frame(self.table_frame, 'Left', phase_number)
         else:
-            self.populate_table_frame(self.table_frame, self.right_phase_frames, phase_number)
+            self.populate_table_frame(self.table_frame, 'Right', phase_number)
 
-    def populate_table_frame(self, table_frame, phase_frames, phase_number):
+    def populate_table_frame(self, table_frame, select_side, phase_number):
         # Clear existing widgets from table_frame
         for widget in table_frame.winfo_children():
             widget.destroy()
@@ -760,9 +781,19 @@ class Process_Table(ttk.Frame):
             heading_label = tk.Label(table_frame, text=heading, font=('Helvetica', 24, 'bold'),
                                      borderwidth=1, relief='solid')
             heading_label.grid(row=0, column=col, sticky="nsew")
-
+        
+        #filter dictionary
+        for x in self.phase_frames:
+            print(x)
+        print(f"Stored Data: {len(self.phase_frames)} entries")
+        print(select_side)
+        print(phase_number)
+        filtered_dict = [d for d in self.phase_frames if d['side'] == select_side and d['phase'] == phase_number]
+        for x in filtered_dict:
+            print(x)
+        print(f"Filtered Data: {len(filtered_dict)} entries")
         # Iterate over phase_frames and populate the table-like structure
-        for row, (frame_num, frame_info) in enumerate(phase_frames[phase_number].items(), start=1):
+        for row, frame_info in enumerate(filtered_dict):
             
             image_path = f'Data_process/{frame_info["side"]}/{frame_info["image_path"]}'
             rom_h = frame_info['rom_h']
@@ -783,81 +814,17 @@ class Process_Table(ttk.Frame):
             tk.Label(table_frame, text=rom_h, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=2, sticky="nsew")
             tk.Label(table_frame, text=rom_k, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=3, sticky="nsew")
             tk.Label(table_frame, text=rom_a, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=4, sticky="nsew")
+            tk.Label(table_frame, text=insole, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=5, sticky="nsew")
             
             # Display image
-            img2 = Image.open(insole)
-            img2.thumbnail((175, 175))  # Resize image if necessary
-            img2 = ImageTk.PhotoImage(img2)
-            img_label2 = tk.Label(table_frame, image=img2, borderwidth=1, relief='solid')
-            img_label2.image = img2  # Keep reference to avoid garbage collection
-            img_label2.grid(row=row, column=5, sticky="nsew")
+           # img2 = Image.open(insole)
+           # img2.thumbnail((175, 175))  # Resize image if necessary
+           # img2 = ImageTk.PhotoImage(img2)
+           # img_label2 = tk.Label(table_frame, image=img2, borderwidth=1, relief='solid')
+           # img_label2.image = img2  # Keep reference to avoid garbage collection
+           # img_label2.grid(row=row, column=5, sticky="nsew")
             
-    def store_to_db(self): #only run this once
-        global mycursor,mydb
-        client_id = self.master.current_patient_id
-        #TODO: get date, and determine if an assessment is performed before this one, if no assessment performed on date, set assessment value as 1, RUN ONCE
-        date = datetime.today().strftime('%Y-%m-%d')
-        print(date)
-        sql = "SELECT assessment_num from assessment WHERE date_time=%s ORDER BY assessment_num DESC" #get the highest assessment number 
-        val = (date,)
-        mycursor.execute(sql,val)
-        result = mycursor.fetchone()
-        if result is not None:
-            assessment_num = result[0] + 1
-        else:
-            assessment_num = 1
-        
-        #TODO: move img from data_process to Database folder, directory is as follows, RUN ONCE
-        #DIR: Database/client_id/date(YYYYMMDD)/assessment_num/(Left/Right)/frame_num.jpg
-        target_path = f"Database/{client_id}/{date}/{assessment_num}"
-        #PS: IF directory specified does not exists, create dir
-        if not os.path.exists(target_path):
-            os.makedirs(target_path,exist_ok=True)
-        shutil.move("Data_process/Right",target_path)
-        shutil.move("Data_process/Left",target_path)
-        os.makedirs('Data_process/Right', exist_ok=True)
-        os.makedirs('Data_process/Left', exist_ok=True)
-        print('moved files')
-            
-        #TODO: forloop this shit
-        # Iterate over each row in the table_frame
-        for phase_number in range(1,8):
-            for lmao,(xd, row) in enumerate(self.right_phase_frames[phase_number].items(), start=1):
-                # Extract data from the labels
-                frame = row['frame_name']
-                image = row['image_path']
-                hips = row['rom_h']
-                knees = row['rom_k']
-                ankle =row['rom_a']
-                insole = row['insole']
-                side = row['side']
-                #send data
-                image =target_path+'/'+side+'/'+image
-                sql = "INSERT INTO assessment (client_id, side, date_time, assessment_num, phase, image, frame, hips, knees, ankle, insole) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                val = (client_id,side,date, assessment_num,phase_number,image,frame,hips,knees,ankle,insole)
-                print(val)
-                mycursor.execute(sql,val)
-            for lmao,(xd, row) in enumerate(self.left_phase_frames[phase_number].items(), start=1):
-                # Extract data from the labels
-                frame = row['frame_name']
-                image = row['image_path']
-                hips = row['rom_h']
-                knees = row['rom_k']
-                ankle =row['rom_a']
-                insole = row['insole']
-                side = row['side']
-                #send data
-                image =target_path+'/'+side+'/'+image
-                sql = "INSERT INTO assessment (client_id, side, date_time, assessment_num, phase, image, frame, hips, knees, ankle, insole) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                val = (client_id,side,date, assessment_num,phase_number,image,frame,hips,knees,ankle,insole)
-                print(val)
-                mycursor.execute(sql,val)
-                
-        #commit changes and close
-        mydb.commit()
-   
     
-
 class Again(ttk.Frame):
     def __init__(self, parent, style):
         '''

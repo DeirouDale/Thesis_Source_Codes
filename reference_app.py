@@ -212,7 +212,7 @@ class Side_Cam(ttk.Frame):
         #self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
         #self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
         #placed into left/right logic
-        self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
+        #self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
         self.client_subscriptions(self.client)
     #use only for mqtt here 
     def on_connect(self, client, userdata, flags, rc):
@@ -223,7 +223,13 @@ class Side_Cam(ttk.Frame):
     def on_disconnect(self, client, userdata, rc):
         self.flag_connected = 0
         print("Disconnected from MQTT server")
-
+    def enter_key(self):        
+        msg = 'Req_Data'
+        pubMsg = self.client.publish(
+            topic='rpi/broadcast',
+            payload=msg.encode('utf-8'),
+            qos=0,
+        )
         # a callback functions 
         #change from print to append
     def right_focus_sensor(self):
@@ -234,15 +240,11 @@ class Side_Cam(ttk.Frame):
         self.client.message_callback_remove('esp32/sensor1')
                     
     def callback_esp32_sensor1(self, client, userdata, msg):
-        print("RSensor: ",str(msg.payload.decode('utf-8'))," ",self.frame_number)
-        
-        # self.esp1_sensor_data.append([str(msg.payload.decode('utf-8')),self.frame_number])
-
         # this is where I would save the esp data to dictionary where in the key is frame and the out is esp, example: {55: espdata}
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
 
     def callback_esp32_sensor2(self, client, userdata, msg):
-        print("LSensor: ",str(msg.payload.decode('utf-8'))," ",self.frame_number)
+        
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
         
     def callback_rpi_broadcast(self, client, userdata, msg):
@@ -402,6 +404,7 @@ class Side_Cam(ttk.Frame):
                 if self.recording:
                     self.out.write(frame)  
                     self.frame_number += 1
+                    self.enter_key()
                 #see current fps
                 #self.nft = time.time()
                 #self.fps = 1/(self.nft-self.pft)

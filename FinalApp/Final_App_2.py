@@ -25,7 +25,7 @@ class refApp(ctk.CTk):
         #logo w/out name
         self.logo_image_2 = ctk.CTkImage(Image.open(current_path + "/img/trial logo.png"),size= (200, 200))
 
-        self.iconbitmap(current_path +"/img/trial logo.ico")
+        #self.iconbitmap(current_path +"/img/trial logo.ico")
 
         #icons dark and light
         self.logo_image_80 = ctk.CTkImage(light_image=Image.open(os.path.join(current_path + "/img/trial logo.png")),
@@ -75,7 +75,9 @@ class refApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         self.title_frame = title(self)
+        self.menubar = MenuBar(self)
         self.title_frame.pack(fill="both", expand=True)
+        
     
     def change_frame(self, current_frame, next_frame_class):
         #current frame change removed

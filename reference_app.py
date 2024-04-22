@@ -177,7 +177,7 @@ class Side_Cam(ttk.Frame):
 
         self.assessment_state = ''
         self.assessment_state_text = 'None'
-
+        self.espdata_test = ''
         self.esp1_sensor_data = []
         self.flag_connected = 0
         
@@ -242,7 +242,7 @@ class Side_Cam(ttk.Frame):
     def callback_esp32_sensor1(self, client, userdata, msg):
         # this is where I would save the esp data to dictionary where in the key is frame and the out is esp, example: {55: espdata}
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
-
+        self.espdata_test = str(msg.payload.decode('utf-8'))
     def callback_esp32_sensor2(self, client, userdata, msg):
         
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
@@ -346,7 +346,7 @@ class Side_Cam(ttk.Frame):
                 self.recording = True
                 self.record_label.config(text="<Space> to Stop Recording")
                 
-                self.client.connect('127.0.0.1',1883) # connect to mqtt
+                self.client.connect('192.168.0.172',1883) # connect to mqtt
                 print("connecting to mqtt")
                 # start a new thread
                 self.client.loop_start()
@@ -355,7 +355,6 @@ class Side_Cam(ttk.Frame):
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
                 output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
                 self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Reduced frame size
-                print(output_filename)
 
             else:
                
@@ -379,6 +378,7 @@ class Side_Cam(ttk.Frame):
     def receive_insole(self, espdata, frame_number):
         
         if self.recording:
+            
             if self.assessment_state == 'left':
                 self.master.frame_numbers_insole['Left'][frame_number] = espdata
                 print(f"Left: {self.frame_number} : {espdata}")
@@ -404,6 +404,7 @@ class Side_Cam(ttk.Frame):
                 if self.recording:
                     self.out.write(frame)  
                     self.frame_number += 1
+                    
                     self.enter_key()
                 #see current fps
                 #self.nft = time.time()
@@ -412,8 +413,11 @@ class Side_Cam(ttk.Frame):
                 #self.fps = int(self.fps)
                 #print(self.fps)
                 #see current fps end
+                cv2.putText(frame, self.espdata_test, (0,0), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                
                 self.webcam_frame.update_idletasks()
                 self.webcam_frame.update()
+                
             
             # Schedule the next frame update
             self.webcam_frame.after(33, update_frame)  # 33 milliseconds ~= 30 fps
@@ -713,13 +717,13 @@ class Process_Table(ttk.Frame):
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
-        return load_model(f'Data Inputs/models/{side}_10_Pat_New2.h5')
+        return load_model(f'Data Inputs/models/{side}_model.h5')
 
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'
         image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
         # Exclude the first 10 and last 10 frames
-        image_files = image_files[10:-10]
+        image_files = image_files[1:-1]
 
         phase_frames = {phase_num: {} for phase_num in range(1, 9)}
 
@@ -736,7 +740,7 @@ class Process_Table(ttk.Frame):
 
                 # Set default values for angles if key is not found
                 try:
-                    insole = self.master.frame_numbers_insole[side][frame_num]
+                    insole = self.master.frame_numbers_insole[side][frame_num] #=====================insole delay
                 except KeyError:
                     insole = 'unknown'
                     
@@ -786,15 +790,15 @@ class Process_Table(ttk.Frame):
             heading_label.grid(row=0, column=col, sticky="nsew")
         
         #filter dictionary
-        for x in self.phase_frames:
-            print(x)
-        print(f"Stored Data: {len(self.phase_frames)} entries")
-        print(select_side)
-        print(phase_number)
+        #for x in self.phase_frames:
+        #    print(x)
+        #print(f"Stored Data: {len(self.phase_frames)} entries")
+        #print(select_side)
+        #print(phase_number)
         filtered_dict = [d for d in self.phase_frames if d['side'] == select_side and d['phase'] == phase_number]
         for x in filtered_dict:
             print(x)
-        print(f"Filtered Data: {len(filtered_dict)} entries")
+        #print(f"Filtered Data: {len(filtered_dict)} entries")
         # Iterate over phase_frames and populate the table-like structure
         for row, frame_info in enumerate(filtered_dict):
             

@@ -11,17 +11,17 @@ import threading
 import paho.mqtt.client as mqtt
 import csv
 import time
-# import mysql.connector 
+import mysql.connector 
 import shutil #move files
 from datetime import datetime #get date
 
-# mydb = mysql.connector.connect(
-# 	host = "localhost",
-# 	user= "gaitrpi",
-# 	password = "gait123",
-# 	database="gaitdata")
+mydb = mysql.connector.connect(
+ 	host = "localhost",
+ 	user= "gaitrpi",
+ 	password = "gait123",
+ 	database="gaitdata")
 
-# mycursor = mydb.cursor(buffered=True)
+mycursor = mydb.cursor(buffered=True)
 
 
 class RefApp(tk.Tk):
@@ -336,7 +336,7 @@ class Side_Cam(ttk.Frame):
     def camera_update_thread(self):
         label = ttk.Label(self.webcam_frame)
         label.grid(row=0, column=0, sticky='nsew')
-
+        
         def update_frame():
             ret, frame = self.cap.read()
             if ret:
@@ -350,14 +350,21 @@ class Side_Cam(ttk.Frame):
                 if self.recording:
                     # Save frame as image
                     cv2.imwrite(f'Data_process/{self.assessment_state_text}_frames/{self.frame_number}.jpg', frame)
+                    
                     self.frame_number += 1
-
-                self.webcam_frame.update_idletasks()
-                self.webcam_frame.update()
+                #see current fps
+                self.nft = time.time()
+                self.fps = 1/(self.nft-self.pft)
+                self.pft = self.nft
+                self.fps = int(self.fps)
+                print(self.fps)
+                #see current fps end
+                #self.webcam_frame.update_idletasks()
+                #self.webcam_frame.update()
             
             # Schedule the next frame update
-            self.webcam_frame.after(33, update_frame)  # 33 milliseconds ~= 30 fps
-
+            self.webcam_frame.after(10, update_frame)  # 33 milliseconds ~= 30 fps
+                        
         # Start the initial frame update
         update_frame()
 
@@ -641,7 +648,7 @@ class Process_Table(ttk.Frame):
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
-        return load_model(f'Data Inputs/models/{side}_official_3.h5')
+        return load_model(f'Data Inputs/models/{side}_model.h5')
 
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'

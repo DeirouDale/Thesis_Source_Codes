@@ -199,6 +199,9 @@ class Side_Cam(ttk.Frame):
         self.webcam_frame.grid(row=1, column=0, sticky='nsew')
         self.choose_side_btn1.grid(row=2, column=0, sticky='nsew')
 
+        self.clear_folder('Data_process/Left_frames')
+        self.clear_folder('Data_process/Right_frames')
+
         self.top_frame_widget()
         self.camera_thread = threading.Thread(target=self.camera_update_thread, daemon=True)
         self.camera_thread.start()
@@ -214,6 +217,18 @@ class Side_Cam(ttk.Frame):
         #placed into left/right logic
         #self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
         self.client_subscriptions(self.client)
+    
+    def clear_folder(self, folder_path):
+        # List all items in the folder
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            
+            # Check if it's a file or directory
+            if os.path.isfile(item_path):
+                
+                os.remove(item_path)
+                
+                
     #use only for mqtt here 
     def on_connect(self, client, userdata, flags, rc):
         self.flag_connected = 1
@@ -339,25 +354,20 @@ class Side_Cam(ttk.Frame):
                 end_btn.grid(row=0, column=1, sticky='nsew')
             elif self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 1:
                 self.after(20, lambda: self.master.change_frame(self, Process_Table))
-
+                
+                
     def toggle_recording(self, state):
         try:
             if not self.recording:
                 self.recording = True
                 self.record_label.config(text="<Space> to Stop Recording")
                 
-                self.client.connect('192.168.0.172',1883) # connect to mqtt
+                self.client.connect('192.168.0.143',1883) # connect to mqtt
                 print("connecting to mqtt")
                 # start a new thread
                 self.client.loop_start()
-                
-                #TODO: update frame numbers here
-                fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                output_filename = f'Data_process/{self.assessment_state_text}_vid.avi'
-                self.out = cv2.VideoWriter(output_filename, fourcc, 10, (1280, 720))  # Reduced frame size
 
             else:
-               
                 self.client.disconnect() #disconnect
                 self.client.loop_stop()
                 self.recording = False
@@ -367,6 +377,7 @@ class Side_Cam(ttk.Frame):
                 self.frame_number = 0
 
                 self.change_button('choose_other')
+
         except Exception as e:
             print("Error", f"An error occurred: {str(e)}")
             # Release resources if an error occurs
@@ -378,7 +389,6 @@ class Side_Cam(ttk.Frame):
     def receive_insole(self, espdata, frame_number):
         
         if self.recording:
-            
             if self.assessment_state == 'left':
                 self.master.frame_numbers_insole['Left'][frame_number] = espdata
                 print(f"Left: {self.frame_number} : {espdata}")
@@ -386,11 +396,12 @@ class Side_Cam(ttk.Frame):
             else:
                 self.master.frame_numbers_insole['Right'][frame_number] = espdata
                 print(f"Right: {self.frame_number} : {espdata}")
-                    
+            self.frame_number += 1
+    
     def camera_update_thread(self):
         label = ttk.Label(self.webcam_frame)
         label.grid(row=0, column=0, sticky='nsew')
-
+        
         def update_frame():
             ret, frame = self.cap.read()
             if ret:
@@ -402,26 +413,26 @@ class Side_Cam(ttk.Frame):
                     label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
                 if self.recording:
-                    self.out.write(frame)  
-                    self.frame_number += 1
+                    # Save frame as 
                     
                     self.enter_key()
-                #see current fps
+                    cv2.imwrite(f'Data_process/{self.assessment_state_text}_frames/{self.frame_number}.jpg', frame)
+                    
+                    
+                ##see current fps
                 #self.nft = time.time()
                 #self.fps = 1/(self.nft-self.pft)
                 #self.pft = self.nft
                 #self.fps = int(self.fps)
                 #print(self.fps)
-                #see current fps end
-                cv2.putText(frame, self.espdata_test, (0,0), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                ##see current fps end
                 
                 self.webcam_frame.update_idletasks()
                 self.webcam_frame.update()
-                
             
             # Schedule the next frame update
-            self.webcam_frame.after(33, update_frame)  # 33 milliseconds ~= 30 fps
-
+            self.webcam_frame.after(10, update_frame)  # 33 milliseconds ~= 30 fps
+                        
         # Start the initial frame update
         update_frame()
 
@@ -438,8 +449,8 @@ class Process_Table(ttk.Frame):
         self.phase_frames = []
         self.side_frame_numbers = {'Left': {}, 'Right': {}}
         self.angles_dict = {'Right': {}, 'Left': {}}
-        print(f"Left: {self.master.side_state['Left']}")
-        print(f"Right: {self.master.side_state['Right']}")
+        #print(f"Left: {self.master.side_state['Left']}")
+        #print(f"Right: {self.master.side_state['Right']}")
 
         self.loading_screen = ttk.Frame(self)
         self.loading_screen.pack(fill='both', expand=True)
@@ -475,115 +486,115 @@ class Process_Table(ttk.Frame):
 
         return angle_degrees
         
-    def crop_vid(self, side):
-        video_path = f'Data_process/{side}_vid.avi'  # video path
+    def calculate_angle(self, a, b, c):
+        ab = b - a
+        bc = c - b
+        dot_product = np.dot(ab, bc)
+        magnitude_ab = np.linalg.norm(ab)
+        magnitude_bc = np.linalg.norm(bc)
+        if magnitude_ab == 0 or magnitude_bc == 0:
+            return None  # Avoid division by zero
+        angle_radians = np.arccos(dot_product / (magnitude_ab * magnitude_bc))
+        angle_degrees = np.degrees(angle_radians)
+
+        return angle_degrees
+        
+    def crop_vid(self, side, folder_path):
         output_folder = f'Data_process/{side}'
         os.makedirs(output_folder, exist_ok=True)
-        
         
         mp_pose = mp.solutions.pose
         pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.8)
 
-        cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+        total_items = len([name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name)) and name.endswith('.jpg')])
 
-        # Check if the VideoCapture object was successfully initialized
-        if not cap.isOpened():
-            print("Error: Could not open the video file.")
-            exit()
-        
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        for file in os.listdir(folder_path):
+            if file.endswith(".jpg"):
+                frame_path = os.path.join(folder_path, file)
+                frame_number = int(file.split(".")[0])
 
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.imread(frame_path)
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            results = pose.process(frame_rgb)
-            
-            frame_number = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+                results = pose.process(frame_rgb)
 
-            if results.pose_landmarks:
-                mp_drawing = mp.solutions.drawing_utils
-                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+                if results.pose_landmarks:
+                    mp_drawing = mp.solutions.drawing_utils
+                    mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-                landmarks = results.pose_landmarks.landmark
+                    landmarks = results.pose_landmarks.landmark
 
-                left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
-                left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
-                left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
+                    left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+                    left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+                    left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
 
-                right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
-                right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
-                right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+                    right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+                    right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+                    right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
 
-                if side == 'Right':
-                    hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
-                    knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
-                    ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
-                    shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
-                    foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
-                else:
-                    hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
-                    knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
-                    ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
-                    shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
-                    foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+                    if side == 'Right':
+                        hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
+                        knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
+                        ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
+                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
+                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
+                    else:
+                        hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
+                        knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
+                        ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
+                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
+                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
 
-                if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
-                    x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
-                    y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
-                    x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
-                    y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
+                    if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
+                        x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
+                        y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
+                        x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
+                        y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
 
-                    bounding_box_content = frame[y_min:y_max, x_min:x_max]
+                        bounding_box_content = frame[y_min:y_max, x_min:x_max]
 
-                    imgWhite = np.ones((500, 500, 3), np.uint8) * 255
+                        imgWhite = np.ones((500, 500, 3), np.uint8) * 255
 
-                    # Resize and adjust the bounding box content
-                    if bounding_box_content.size > 0:
-                        content_height, content_width, _ = bounding_box_content.shape
-                        aspect_ratio = content_height / content_width
+                        # Resize and adjust the bounding box content
+                        if bounding_box_content.size > 0:
+                            content_height, content_width, _ = bounding_box_content.shape
+                            aspect_ratio = content_height / content_width
 
-                        if aspect_ratio > 1:
-                            k = 500 / content_height
-                            wCal = math.ceil(k * content_width)
-                            imgResize = cv2.resize(bounding_box_content, (wCal, 500))
-                            wGap = math.ceil((500 - wCal) / 2)
-                            if imgResize.shape[1] < 500:
-                                imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                            if aspect_ratio > 1:
+                                k = 500 / content_height
+                                wCal = math.ceil(k * content_width)
+                                imgResize = cv2.resize(bounding_box_content, (wCal, 500))
+                                wGap = math.ceil((500 - wCal) / 2)
+                                if imgResize.shape[1] < 500:
+                                    imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                                else:
+                                    imgWhite[:, :] = imgResize[:, :500]
                             else:
-                                imgWhite[:, :] = imgResize[:, :500]
-                        else:
-                            k = 500 / content_width
-                            hCal = math.ceil(k * content_height)
-                            imgResize = cv2.resize(bounding_box_content, (500, hCal))
-                            hGap = math.ceil((500 - hCal) / 2)
-                            if imgResize.shape[0] < 500:
-                                imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
-                            else:
-                                imgWhite[:, :] = imgResize[:500, :]
+                                k = 500 / content_width
+                                hCal = math.ceil(k * content_height)
+                                imgResize = cv2.resize(bounding_box_content, (500, hCal))
+                                hGap = math.ceil((500 - hCal) / 2)
+                                if imgResize.shape[0] < 500:
+                                    imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                                else:
+                                    imgWhite[:, :] = imgResize[:500, :]
 
-                        file_name = f"{frame_number}.jpg"
-                        file_path = os.path.join(output_folder, file_name)
-                        cv2.imwrite(file_path, imgWhite)
+                            file_name = f"{frame_number}.jpg"
+                            file_path = os.path.join(output_folder, file_name)
+                            cv2.imwrite(file_path, imgWhite)
 
-                        hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
-                        knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
-                        ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
-                        self.angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
+                            hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
+                            knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
+                            ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
+                            self.angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
 
-            self.percent_label.config(text=f"{side} side, currently prcessing frame number: {frame_number}")
-
-        # Release resources after processing each video
-        cap.release()
-        cv2.destroyAllWindows()
+                self.percent_label.config(text=f"{side} side, currently processing: {frame_number}")
         
     def video_to_image(self):
-
         if self.master.side_state['Right'] == 1:
-            self.crop_vid('Right')
+            self.crop_vid('Right', 'Data_process/Right_frames')
         if self.master.side_state['Left'] == 1:
-            self.crop_vid('Left')
+            self.crop_vid('Left', 'Data_process/Left_frames')
 
         # After the video processing is done, start processing images
         self.process_images()
@@ -666,7 +677,7 @@ class Process_Table(ttk.Frame):
         client_id = self.master.current_patient_id
         #TODO: get date, and determine if an assessment is performed before this one, if no assessment performed on date, set assessment value as 1, RUN ONCE
         date = datetime.today().strftime('%Y-%m-%d')
-        print(date)
+        #print(date)
         sql = "SELECT assessment_num from assessment WHERE date_time=%s ORDER BY assessment_num DESC" #get the highest assessment number 
         val = (date,)
         mycursor.execute(sql,val)
@@ -740,7 +751,10 @@ class Process_Table(ttk.Frame):
 
                 # Set default values for angles if key is not found
                 try:
-                    insole = self.master.frame_numbers_insole[side][frame_num] #=====================insole delay
+                    if self.master.frame_numbers_insole[side] == 'Left':
+                        insole = self.master.frame_numbers_insole[side][frame_num - 5] #=====================
+                    else:
+                        insole = self.master.frame_numbers_insole[side][frame_num - 5] #=====================insole delay
                 except KeyError:
                     insole = 'unknown'
                     

@@ -443,14 +443,19 @@ class Side_Cam(ttk.Frame):
 class Process_Table(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
-        self.style = style
-        self.left_model = []
-        self.right_model = []
-        self.phase_frames = []
+        
+        self.left_model = None
+        self.right_model = None
+        self.left_phase_frames = None
+        self.right_phase_frames = None
+
+        self.grid_rowconfigure(0, weight = 1)
+        self.grid_columnconfigure(0, weight = 1)
+
         self.side_frame_numbers = {'Left': {}, 'Right': {}}
         self.angles_dict = {'Right': {}, 'Left': {}}
-        #print(f"Left: {self.master.side_state['Left']}")
-        #print(f"Right: {self.master.side_state['Right']}")
+        print(f"Left: {self.master.side_state['Left']}")
+        print(f"Right: {self.master.side_state['Right']}")
 
         self.loading_screen = ttk.Frame(self)
         self.loading_screen.pack(fill='both', expand=True)

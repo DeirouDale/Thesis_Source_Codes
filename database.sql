@@ -1,10 +1,10 @@
 CREATE DATABASE gaitdata;
 CREATE TABLE IF NOT EXISTS patient_details(
-            client_id VARCHAR(250) PRIMARY KEY,
-            name VARCHAR(255) NOT NULL
+            client_id VARCHAR(250) PRIMARY KEY, AUTO_INCREMENT,
+            name VARCHAR(255) NOT NULL 
 )
 CREATE TABLE IF NOT EXISTS assessment (
-            id INTEGER PRIMARY KEY AUTO_INCREMENT,
+            id INTEGER PRIMARY KEY ,
             client_id VARCHAR(250) NOT NULL,
             side VARCHAR(250) NOT NULL,
             date_time DATE,

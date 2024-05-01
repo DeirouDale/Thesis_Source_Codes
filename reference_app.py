@@ -478,31 +478,71 @@ class Process_Table(ttk.Frame):
                 # If it's a file,  File "/home/silog/Thesis_Source_Codes/reference_app.py", line 703, in send remove it
                 os.remove(item_path)
 
-    def calculate_angle(self, a, b, c):
-        ab = b - a
-        bc = c - b
-        dot_product = np.dot(ab, bc)
-        magnitude_ab = np.linalg.norm(ab)
-        magnitude_bc = np.linalg.norm(bc)
-        if magnitude_ab == 0 or magnitude_bc == 0:
-            return None  # Avoid division by zero
-        angle_radians = np.arccos(dot_product / (magnitude_ab * magnitude_bc))
-        angle_degrees = np.degrees(angle_radians)
+    def calculate_angle_hip(side, a, b, c):
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
 
-        return angle_degrees
-        
-    def calculate_angle(self, a, b, c):
-        ab = b - a
-        bc = c - b
-        dot_product = np.dot(ab, bc)
-        magnitude_ab = np.linalg.norm(ab)
-        magnitude_bc = np.linalg.norm(bc)
-        if magnitude_ab == 0 or magnitude_bc == 0:
-            return None  # Avoid division by zero
-        angle_radians = np.arccos(dot_product / (magnitude_ab * magnitude_bc))
-        angle_degrees = np.degrees(angle_radians)
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
 
-        return angle_degrees
+        new_angle = 180 - angle
+        if side == "Right":
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} extension"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} flexion"
+        else:
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} flexion"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} extension"
+
+        return final_angle
+
+    def calculate_angle_knee(side, a, b, c):
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
+
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
+
+        new_angle = 180 - angle
+
+        if side == "Right":
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} flexion"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} extension"
+        else:
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} extension"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} flexion"
+
+        return final_angle
+
+    def calculate_angle_ankle(side, a, b, c):
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
+
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
+
+
+        if angle > 180:
+            new_angle = 90 - (360 - angle)
+        else:
+            new_angle = 90 - angle
+
+        if new_angle < 0:
+            final_angle = f"{round(abs(new_angle), 2)} extension"
+        else:
+            final_angle = f"{round(abs(new_angle), 2)} flexion"
+
+        return final_angle
         
     def crop_vid(self, side, folder_path):
         output_folder = f'Data_process/{side}'
@@ -511,90 +551,109 @@ class Process_Table(ttk.Frame):
         mp_pose = mp.solutions.pose
         pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.8)
 
-        total_items = len([name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name)) and name.endswith('.jpg')])
+        file_list = sorted([name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name)) and name.endswith('.jpg')])
+        total_items = len(file_list)
 
-        for file in os.listdir(folder_path):
-            if file.endswith(".jpg"):
-                frame_path = os.path.join(folder_path, file)
-                frame_number = int(file.split(".")[0])
+        for i, file in enumerate(file_list):
+            frame_path = os.path.join(folder_path, file)
+            frame_number = i
 
-                frame = cv2.imread(frame_path)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cv2.imread(frame_path)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                results = pose.process(frame_rgb)
+            results = pose.process(frame_rgb)
 
-                if results.pose_landmarks:
-                    mp_drawing = mp.solutions.drawing_utils
-                    mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            if results.pose_landmarks:
+                mp_drawing = mp.solutions.drawing_utils
+                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-                    landmarks = results.pose_landmarks.landmark
+                landmarks = results.pose_landmarks.landmark
 
-                    left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
-                    left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
-                    left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
+                left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+                left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+                left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
 
-                    right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
-                    right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
-                    right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+                right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+                right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+                right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
 
-                    if side == 'Right':
-                        hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
-                        knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
-                        ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
-                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
-                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
-                    else:
-                        hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
-                        knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
-                        ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
-                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
-                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+                if side == "Right":
+                    # Right Side Landmarks Indices
+                    hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
+                    knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
+                    ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
+                    shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
+                    foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
+                    heel = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HEEL.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HEEL.value].y])
+                    
+                    # Calculate the midpoint between foot_index and heel, 70% closer to heel
+                    new_landmark = heel - 0.25 * (heel - foot_index)
+                    
+                    # Convert the landmark to pixel coordinates
+                    h, w, _ = frame.shape
+                    new_landmark_px = (int(new_landmark[0] * w), int(new_landmark[1] * h))
+                else:
+                    # Left Side Landmarks Indices
+                    hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
+                    knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
+                    ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
+                    shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
+                    foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+                    heel = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HEEL.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HEEL.value].y])
+                    
+                    # Calculate the midpoint between foot_index and heel, 70% closer to heel
+                    new_landmark = heel - 0.2 * (heel - foot_index)
+                    
+                    # Convert the landmark to pixel coordinates
+                    h, w, _ = frame.shape
+                    new_landmark_px = (int(new_landmark[0] * w), int(new_landmark[1] * h))
 
-                    if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
-                        x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
-                        y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
-                        x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
-                        y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
+                if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
+                    x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
+                    y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
+                    x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
+                    y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
 
-                        bounding_box_content = frame[y_min:y_max, x_min:x_max]
+                    bounding_box_content = frame[y_min:y_max, x_min:x_max]
 
-                        imgWhite = np.ones((500, 500, 3), np.uint8) * 255
+                    imgWhite = np.ones((500, 500, 3), np.uint8) * 255
 
-                        # Resize and adjust the bounding box content
-                        if bounding_box_content.size > 0:
-                            content_height, content_width, _ = bounding_box_content.shape
-                            aspect_ratio = content_height / content_width
+                    # Resize and adjust the bounding box content
+                    if bounding_box_content.size > 0:
+                        content_height, content_width, _ = bounding_box_content.shape
+                        aspect_ratio = content_height / content_width
 
-                            if aspect_ratio > 1:
-                                k = 500 / content_height
-                                wCal = math.ceil(k * content_width)
-                                imgResize = cv2.resize(bounding_box_content, (wCal, 500))
-                                wGap = math.ceil((500 - wCal) / 2)
-                                if imgResize.shape[1] < 500:
-                                    imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
-                                else:
-                                    imgWhite[:, :] = imgResize[:, :500]
+                        if aspect_ratio > 1:
+                            k = 500 / content_height
+                            wCal = math.ceil(k * content_width)
+                            imgResize = cv2.resize(bounding_box_content, (wCal, 500))
+                            wGap = math.ceil((500 - wCal) / 2)
+                            if imgResize.shape[1] < 500:
+                                imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
                             else:
-                                k = 500 / content_width
-                                hCal = math.ceil(k * content_height)
-                                imgResize = cv2.resize(bounding_box_content, (500, hCal))
-                                hGap = math.ceil((500 - hCal) / 2)
-                                if imgResize.shape[0] < 500:
-                                    imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
-                                else:
-                                    imgWhite[:, :] = imgResize[:500, :]
+                                imgWhite[:, :] = imgResize[:, :500]
+                        else:
+                            k = 500 / content_width
+                            hCal = math.ceil(k * content_height)
+                            imgResize = cv2.resize(bounding_box_content, (500, hCal))
+                            hGap = math.ceil((500 - hCal) / 2)
+                            if imgResize.shape[0] < 500:
+                                imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                            else:
+                                imgWhite[:, :] = imgResize[:500, :]
 
-                            file_name = f"{frame_number}.jpg"
-                            file_path = os.path.join(output_folder, file_name)
-                            cv2.imwrite(file_path, imgWhite)
+                        file_name = f"{frame_number}.jpg"
+                        file_path = os.path.join(output_folder, file_name)
+                        cv2.imwrite(file_path, imgWhite)
 
-                            hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
-                            knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
-                            ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
-                            self.angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
+                        hip_angle = self.calculate_angle_hip(side, shoulder, hip, knee)
+                        knee_angle = self.calculate_angle_knee(side, hip, knee, ankle)
+                        ankle_angle = self.calculate_angle_ankle(side, ankle, new_landmark, foot_index)
+                        self.angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
 
-                self.percent_label.config(text=f"{side} side, currently processing: {frame_number}")
-        
+                self.percent_label.config(text=f"{side} side, currently processing: {round((frame_number/total_items), 2) * 100}%")
+
+
     def video_to_image(self):
         if self.master.side_state['Right'] == 1:
             self.crop_vid('Right', 'Data_process/Right_frames')
@@ -603,6 +662,18 @@ class Process_Table(ttk.Frame):
 
         # After the video processing is done, start processing images
         self.process_images()
+
+    def process_images(self):
+        # Load models for Left and Right
+
+        if self.master.side_state['Right'] == 1:
+            self.right_model = self.load_model_for_side('Right')
+            self.process_images_for_side('Right', self.right_model)
+        if self.master.side_state['Left'] == 1:
+            self.left_model = self.load_model_for_side('Left')
+            self.process_images_for_side('Left', self.left_model)
+        # Switch to the table frame for further actions
+        self.table_frame()
 
     def process_images(self):
         # Load models for Left and Right
@@ -733,7 +804,7 @@ class Process_Table(ttk.Frame):
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
-        return load_model(f'Data Inputs/models/{side}_model.h5')
+        return load_model(f'Data Inputs/models/{side}_official.h5')
 
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'

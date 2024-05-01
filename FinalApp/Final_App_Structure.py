@@ -19,6 +19,7 @@ from datetime import datetime
 import re
 import shutil #move files
 import paho.mqtt.client as mqtt
+import time
 
 conn = mysql.connector.connect(
     host = "localhost",
@@ -26,6 +27,8 @@ conn = mysql.connector.connect(
     password = "gait123",
     database="gaitdata"
 )
+
+
 
 class refApp(tk.Tk):
     def __init__(self, size):
@@ -85,6 +88,7 @@ class refApp(tk.Tk):
 
         #side_flag
         self.current_patient = 'None'
+        self.current_patient_id = 'None'
         self.popup_window = None
         self.side_state = {'Right': 0, 'Left':0}
         self.frame_numbers_insole = {'Left': {}, 'Right': {}}
@@ -104,6 +108,7 @@ class refApp(tk.Tk):
         self.style.configure('dark.TLabel', font= ("montserrat", 14))
         self.style.configure('search.TButton', font = ("Raleway", 12, "bold"), padding = [6, 6, 6, 6])
         self.style.configure('danger.TButton', font = ("Raleway", 16, "bold"), padding = [10, 5, 10, 5])
+        self.style.configure('sample.TButton', font = ("Raleway", 12, "bold"), padding = [10, 5, 10, 5], background= 'red')
     
     def open_popupWindow(self, window):
         self.window = window
@@ -131,6 +136,9 @@ class refApp(tk.Tk):
         self.next_frame_class = next_frame_class
         self.current_frame = self.next_frame_class(self, self.style)
         self.current_frame.pack(fill='both', expand=True)
+        
+        if isinstance(current_frame, Side_Cam):
+            current_frame.destroy()
 
 class Title(ttk.Frame):
     def __init__(self, parent, style):
@@ -183,7 +191,7 @@ class Title(ttk.Frame):
 class MenuBar(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
-
+        
         self.conn = mysql.connector.connect(
             host = "localhost",
 	    user= "gaitrpi",
@@ -193,7 +201,12 @@ class MenuBar(ttk.Frame):
         self.cursor = self.conn.cursor()
         self.client_id = None
         self.style = style
-
+        self.start_time = time.time()
+        
+        #self.scan_esp_thread = threading.Thread(target=self.detect_esp, daemon=True)
+        #self.scan_esp_thread.start()
+        
+        self.esp_status = None
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
@@ -250,7 +263,24 @@ class MenuBar(ttk.Frame):
         self.main_frame.grid_rowconfigure(3, weight = 1)
 
         self.StartAssessment()
-
+        
+    def detect_esp(self):
+        while True:
+            current_time = time.time()
+            elapsed_time = current_time - self.start_time
+            if elapsed_time >= 30:
+                response1 = os.system("ping -c 1 192.168.0.184")
+                response2 = os.system("ping -c 1 192.168.0.171")
+                if response1 == 0 and response2 == 0:
+                    #detect
+                    self.esp_status = "Detected"
+                    self.insole_label.config(text= f"Status: {self.esp_status}")
+                else:
+                    #not fully detected
+                    self.esp_status = "Not Detected"
+                    self.insole_label.config(text= f"Status: {self.esp_status}")
+                self.start_time = current_time
+            
     #frame 1 -----> Start Assessment of the Patients
     def StartAssessment(self):
 
@@ -267,13 +297,13 @@ class MenuBar(ttk.Frame):
         self.label_frame = ttk.LabelFrame(self.StartAssessment_frame, text= " Instructions ", style = 'primary')
         self.label_frame.grid(row = 1, column = 0, pady=(20,20), sticky = "ew")
 
-        self.warning = ttk.Label(self.label_frame, text= "1. This is warning number 1", style= 'dark.TLabel')
+        self.warning = ttk.Label(self.label_frame, text= "1. Room should be well lit and background in white color.", style= 'dark.TLabel')
         self.warning.grid(row = 0, column = 0, padx= 20, pady=(10,5))
 
-        self.warning_2 = ttk.Label(self.label_frame, text= "2. This is warning number 2", style= 'dark.TLabel')
+        self.warning_2 = ttk.Label(self.label_frame, text= "2. Client should be out of the frame before reocrding.", style= 'dark.TLabel')
         self.warning_2.grid(row = 1, column = 0, padx= 20, pady=(5,5))
         
-        self.warning_3 = ttk.Label(self.label_frame, text= "3. This is warning number 3", style= 'dark.TLabel')
+        self.warning_3 = ttk.Label(self.label_frame, text= "3. Client head to feet should be visible on screen.", style= 'dark.TLabel')
         self.warning_3.grid(row = 2, column = 0, padx= 20, pady=(5,10))
 
         #lower frames 
@@ -293,8 +323,8 @@ class MenuBar(ttk.Frame):
         self.insole = ttk.Label(self.insole_syncing_frame, image = self.master.foot_icon)
         self.insole.grid(row = 1, column = 0, padx = 20, pady=(20,20))
 
-        self.label = ttk.Label(self.insole_syncing_frame, text = "Status: NOT SYNC", bootstyle= "danger", font=('raleway', 18, 'bold'))
-        self.label.grid(row = 2, column = 0, padx = 20, pady=(40,60))
+        self.insole_label = ttk.Label(self.insole_syncing_frame, text = f"Status:{self.esp_status}", bootstyle= "primary", font=('raleway', 18, 'bold'))
+        self.insole_label.grid(row = 2, column = 0, padx = 20, pady=(40,60))
 
         #icons patient
         self.patient_number = ttk.Labelframe(self.second_frame, text= "Patient Input", style = 'primary')
@@ -309,9 +339,9 @@ class MenuBar(ttk.Frame):
         self.patient_info_frame = ttk.Frame(self.patient_number, borderwidth= 0)
         self.patient_info_frame.grid(row = 1, column = 0, pady= (10,10))
 
-        self.patient_num = ttk.Label(self.patient_info_frame, font=('Montserrat',14, 'bold'), text="Patient Number: None")
+        self.patient_num = ttk.Label(self.patient_info_frame, font=('Montserrat',14, 'bold'), text=f"Patient Number: {self.master.current_patient_id}")
         self.patient_num.grid(row = 0, column = 0, padx = 20, pady= (20,10))
-        self.patient_name = ttk.Label(self.patient_info_frame, font=('montserrat', 14, 'bold'), text="Patient Name: None")
+        self.patient_name = ttk.Label(self.patient_info_frame, font=('montserrat', 14, 'bold'), text=f"Patient Name: {self.master.current_patient}")
         self.patient_name.grid(row = 0, column = 1, padx = 20, pady= (20,10))
 
         self.patient_entry_frame = ttk.Frame(self.patient_number, borderwidth= 0)
@@ -320,13 +350,46 @@ class MenuBar(ttk.Frame):
         self.patient_entry = ttk.Entry(self.patient_entry_frame, font= ('montserrat', 12, 'bold'), bootstyle = 'default', width= 30)
         self.patient_entry.grid(row = 0, column = 0, padx=10, pady=(15, 35))
 
-        self.submit_button = ttk.Button(self.patient_entry_frame, text="submit", command= "", 
+        self.submit_button = ttk.Button(self.patient_entry_frame, text="submit", command= self.submit_button_get_info, 
                                        bootstyle = 'primary', cursor = 'hand2', width = 8, style= 'search.TButton', takefocus= False)
         self.submit_button.grid(row=0, column=1, padx=10, pady=(15, 35))
 
-        self.proceed_button = ttk.Button(self.patient_number, text= "Proceed to Assessment", command= lambda:self.master.change_frame(self, Side_Cam)
-                                         , style= 'main.TButton', takefocus= False, cursor= 'hand2')
+        self.proceed_button = ttk.Button(self.patient_number, text= "Proceed to Assessment", command= lambda: self.master.change_frame(self, Side_Cam)
+                                         , style= 'main.TButton', takefocus= False, cursor= 'hand2', state='disabled')
         self.proceed_button.grid(row=3, column=0, padx=10, pady=(15, 60))
+    
+    def submit_button_get_info(self):        
+        conn = mysql.connector.connect(
+        host = "localhost",
+	    user= "gaitrpi",
+	    password = "gait123",
+	    database="gaitdata"
+        )
+        client_id = self.patient_entry.get()
+        cursor = conn.cursor()
+        cursor.execute("SELECT first_name, last_name FROM patient_info WHERE client_id = %s",(client_id,))
+        
+        name = cursor.fetchone()
+        
+        if name is not None:
+            fullname = name[0]+' '+name[1]
+            self.master.current_patient = fullname
+            self.master.current_patient_id = client_id
+            
+            self.patient_num.config(text= f"Patient Number: {self.master.current_patient_id}")
+            self.patient_name.config(text= f"Patient Name: {self.master.current_patient}")
+            self.proceed_button.config(state = 'normal')
+        else:
+            messagebox.showerror("Error", "Client ID does not exist!")
+            self.master.current_patient = 'None'
+            self.master.current_patient_id = 'None'
+            
+            self.patient_num.config(text= f"Patient Number: {self.master.current_patient_id}")
+            self.patient_name.config(text= f"Patient Name: {self.master.current_patient}")
+            self.proceed_button.config(state = 'disabled')
+            
+        self.patient_entry.delete(0, 'end')
+            
 
     #Frame 4 about us
     def about_us(self):
@@ -469,8 +532,9 @@ class MenuBar(ttk.Frame):
         self.table_frame.grid_columnconfigure(0, weight = 1)
         self.table_frame.grid_rowconfigure(0, weight = 1)
 
-        self.table_register_patient = ttk.Treeview(self.table_frame, columns = ('FName', 'LName', 'Age', 'Gender', 'Address', 'Birthdate'), 
+        self.table_register_patient = ttk.Treeview(self.table_frame, columns = ('Client-ID','FName', 'LName', 'Age', 'Gender', 'Address', 'Birthdate'), 
                                                    show= 'headings', height = 30, bootstyle = "info")
+        self.table_register_patient.heading('Client-ID', text = "Client-ID")
         self.table_register_patient.heading('FName', text = "First Name")
         self.table_register_patient.heading('LName', text = "Last Name")
         self.table_register_patient.heading('Age', text = "Age")
@@ -485,7 +549,7 @@ class MenuBar(ttk.Frame):
         self.table_register_patient.delete(*self.table_register_patient.get_children())
 
         conn = mysql.connector.connect(
-            host = "localhost",
+        host = "localhost",
 	    user= "gaitrpi",
 	    password = "gait123",
 	    database="gaitdata"
@@ -707,7 +771,7 @@ class MenuBar(ttk.Frame):
                 self.view_button = ttk.Button(self.buttons_frame, text="", image=self.master.eye_icon, width=80, cursor="hand2",
                                             takefocus=False, bootstyle="info",
                                             command=lambda id=client_id, num=assessment_num, fname=first_name, lname=last_name, dt=date_time: self.view_assessment(id, num, fname, lname,dt))
-                self.view_button.pack(side=tk.LEFT, padx=(670, 10))
+                self.view_button.pack(side=tk.LEFT, padx=(750, 10))
                 self.delete_button = ttk.Button(self.buttons_frame, text="", image=self.master.delete_icon, width=80,
                                                 cursor="hand2", takefocus=False, bootstyle="info", command=lambda id=client_id, num=assessment_num, dt=date_time: self.delete_assessment(id, num, dt))
                 self.delete_button.pack(side=tk.LEFT, padx=30)
@@ -1132,8 +1196,8 @@ class Side_Cam(ttk.Frame):
         self.nft =0
         self.pft =0
         self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Reduced frame width
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720 )  # Reduced frame height
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1200)  # Reduced frame width
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 700 )  # Reduced frame height
         self.recording = False
         self.out = None
 
@@ -1157,7 +1221,7 @@ class Side_Cam(ttk.Frame):
         self.choose_buttons_frame.grid(row = 2, column = 0, pady = 20, padx = 20)
 
         #current Patient Label and Current Video
-        self.current_patient = ttk.Label(self.text_frame, text = "Current Patient: None", font= ("montserrat", 18, 'bold'), bootstyle = "inverse-light")
+        self.current_patient = ttk.Label(self.text_frame, text = f"Current Patient: {self.master.current_patient}", font= ("montserrat", 18, 'bold'), bootstyle = "inverse-light")
         self.current_patient.grid(row = 0, column = 0, padx = (0, 120))
         self.current_leg = ttk.Label(self.text_frame, text = f"Current Video: {self.assessment_state_text}", font=("montserrat", 18, 'bold'), bootstyle = "inverse-light")
         self.current_leg.grid(row = 0, column = 2, padx = (120, 0))
@@ -1180,16 +1244,16 @@ class Side_Cam(ttk.Frame):
         self.clear_folder('Data_process/Left_frames')
         self.clear_folder('Data_process/Right_frames')
 
-        #self.client = mqtt.Client("rpi_client1") #this should be a unique name
-        #self.flag_connected = 0
+        self.client = mqtt.Client("rpi_client1") #this should be a unique name
+        self.flag_connected = 0
 
-        #self.client.on_connect = self.on_connect
-        #self.client.on_disconnect = self.on_disconnect
-        #self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
-        #self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
+        self.client.on_connect = self.on_connect
+        self.client.on_disconnect = self.on_disconnect
+        self.client.message_callback_add('esp32/sensor1', self.callback_esp32_sensor1)
+        self.client.message_callback_add('esp32/sensor2', self.callback_esp32_sensor2)
         #placed into left/right logic
-        #self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
-        #self.client_subscriptions(self.client)
+        self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
+        self.client_subscriptions(self.client)
         
     def clear_folder(self, folder_path):
         # List all items in the folder
@@ -1250,7 +1314,7 @@ class Side_Cam(ttk.Frame):
             self.master.side_state['Right'] = 1
             self.assessment_state_text = 'Right'
             
-            #self.right_focus_sensor()
+            self.right_focus_sensor()
             self.choose_buttons_frame.grid_forget()
             self.current_leg.config(text=f"Current Video: {self.assessment_state_text}")
 
@@ -1270,7 +1334,7 @@ class Side_Cam(ttk.Frame):
             self.master.side_state['Left'] = 1
             self.assessment_state_text = 'Left'
             
-            #self.right_focus_sensor()
+            self.right_focus_sensor()
             self.choose_buttons_frame.grid_forget()
             self.current_leg.config(text=f"Current Video: {self.assessment_state_text}")
 
@@ -1287,11 +1351,14 @@ class Side_Cam(ttk.Frame):
             self.master.bind('<space>', lambda event: self.toggle_recording(state))
         
         elif state == 'choose_other':
+            
+            self.record_frame.grid_forget()
+            
             if self.master.side_state['Right'] == 1 and self.master.side_state['Left'] == 0:
                 self.choose_buttons_frame_2 = ttk.Frame(self.container_frame, borderwidth=0, bootstyle = "light")
                 self.choose_buttons_frame_2.grid(row = 2, column = 0, pady = 20, padx = 20)
 
-                #self.right_focus_sensor()
+                self.right_focus_sensor()
 
                 self.leg_button = ttk.Button(self.choose_buttons_frame_2, text= "START LEFT LEG", width = 18, style = 'main.TButton', takefocus= False,
                                           cursor = "hand2",  command= lambda: self.change_button('left'))
@@ -1310,7 +1377,7 @@ class Side_Cam(ttk.Frame):
                 self.choose_buttons_frame_2 = ttk.Frame(self.container_frame, borderwidth=0, bootstyle = "light")
                 self.choose_buttons_frame_2.grid(row = 2, column = 0, pady = 20, padx = 20)
 
-                #self.right_focus_sensor()
+                self.right_focus_sensor()
 
                 self.leg_button = ttk.Button(self.choose_buttons_frame_2, text= "START RIGHT LEG", width = 18, style = 'main.TButton', takefocus= False,
                                           cursor = "hand2",  command= lambda: self.change_button('left'))
@@ -1333,16 +1400,16 @@ class Side_Cam(ttk.Frame):
                 self.recording = True
                 self.record_label.configure(text="Press Stop to Start Recording")
                 
-                #self.client.connect('192.168.0.143',1883) # connect to mqtt
+                self.client.connect('192.168.0.143',1883) # connect to mqtt
                 print("connecting to mqtt")
                 # start a new thread
-                #self.client.loop_start()
+                self.client.loop_start()
                 
 
             else:
                     
-                #self.client.disconnect() #disconnect
-                #self.client.loop_stop()
+                self.client.disconnect() #disconnect
+                self.client.loop_stop()
                 self.recording = False
                 self.record_label.config(text="<Space> to Start Recording")
 
@@ -1386,7 +1453,7 @@ class Side_Cam(ttk.Frame):
                 if self.recording:
                     # Save frame as 
                     self.frame_number += 1
-                    #self.enter_key()
+                    self.enter_key()
                     cv2.imwrite(f'Data_process/{self.assessment_state_text}_frames/{self.frame_number}.jpg', frame)
                     
                 ##see current fps
@@ -1448,14 +1515,14 @@ class patient_records(tk.Toplevel):
         self.tool_frame.grid(row=1, column=0, sticky="ew", pady=(20, 20))
 
         # Leg option menu
-        self.leg_scroll_label = ttk.Label(self.tool_frame, font=('montserrat', 12, 'bold'), text="Side:")
+        self.leg_scroll_label = ttk.Label(self.tool_frame, font=('montserrat', 12, 'bold'), text="Side:", bootstyle= 'inverse-light')
         self.leg_scroll_label.pack(side=tk.LEFT, padx=10)
         self.leg_scroll = ttk.Combobox(self.tool_frame, values=["Right","Left"], bootstyle='primary', width=19, state='readonly', font=('montserrat', 10, 'bold'))
         self.leg_scroll.set("Right")
         self.leg_scroll.pack(side=tk.LEFT, padx=20)
 
         #Gait phase
-        self.leg_phase_label = ttk.Label(self.tool_frame, font=('montserrat', 12, 'bold'), text="Gait Phase:")
+        self.leg_phase_label = ttk.Label(self.tool_frame, font=('montserrat', 12, 'bold'), text="Gait Phase:", bootstyle= 'inverse-light')
         self.leg_phase_label.pack(side=tk.LEFT, padx=10)
         self.leg_phase_scroll = ttk.Combobox(self.tool_frame, values=["Initial Contact (1)", "Loading Response (2)", "Midstance (3)", "Terminal Stance (4)", "Pre-Swing (5)", "Initial Swing (6)", "Midswing (7)", "Terminal swing (8)"], state='readonly', width=20)
         self.leg_phase_scroll.set("Initial Contact (1)")  # Set initial value
@@ -1479,11 +1546,11 @@ class patient_records(tk.Toplevel):
 
         # Configure window size and center on parent
         self.update_idletasks()  # Update the window to calculate frame size
-        width = self.labels_frame.winfo_reqwidth() + 1280  # Add padding
-        height = self.labels_frame.winfo_reqheight() + 720  # Add padding
-        x = (self.winfo_screenwidth() - width) // 2
-        y = (self.winfo_screenheight() - height) // 2
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        #width = self.labels_frame.winfo_reqwidth()  # Add padding
+        #height = self.labels_frame.winfo_reqheight() # Add padding
+        #x = (self.winfo_screenwidth() - width) // 2
+        #y = (self.winfo_screenheight() - height) // 2
+        #self.geometry(f"{width}x{height}+{x}+{y}")
 
     def update_labels(self, event=None):
         leg = self.leg_scroll.get()
@@ -1528,7 +1595,7 @@ class patient_records(tk.Toplevel):
 
                     # Create a canvas widget
                     canvas = tk.Canvas(self.labels_frame)
-                    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx= 50, pady = 20)
 
                     # Create a scrollbar for the canvas
                     scrollbar = ttk.Scrollbar(self.labels_frame, orient=tk.VERTICAL, command=canvas.yview)
@@ -1545,8 +1612,8 @@ class patient_records(tk.Toplevel):
 
                     # Display headlines
                     for col, headline in zip(column_indexes, headlines):
-                        headline_label = tk.Label(inner_frame, text=headline, font=("Helvetica", 16, "bold"))
-                        headline_label.grid(row=0, column=col, padx=30, pady=10)
+                        headline_label = tk.Label(inner_frame, text=headline, font=("montserrat", 14, "bold"))
+                        headline_label.grid(row=0, column=col, padx=20, pady=10)
 
                     # Display assessment details for each row of data
                     for row_num, row_data in enumerate(data, start=1):
@@ -1557,7 +1624,7 @@ class patient_records(tk.Toplevel):
                                 try:
                                     # Load and resize image using PIL
                                     image_pil = Image.open(image_file_path)
-                                    image_resized = image_pil.resize((280, 280))
+                                    image_resized = image_pil.resize((175, 175))
                                     image_tk = ImageTk.PhotoImage(image_resized)
                                     # Create a label to display the image
                                     image_label = tk.Label(inner_frame, image=image_tk)
@@ -1567,8 +1634,58 @@ class patient_records(tk.Toplevel):
                                     print(f"Error loading image: {e}")
                             else:
                                 # Create text label for other columns
-                                detail_label = tk.Label(inner_frame, text=value, anchor="w", justify="left", wraplength=200, font=("Arial", 40))
+                                detail_label = tk.Label(inner_frame, text=value, anchor="w", justify="left", wraplength=200, font=("montserrat", 16))
                                 detail_label.grid(row=row_num, column=col, padx=10, pady=5)
+                                
+                            #TODO - Change text color to red if true, dunno how to change color
+                            if col == 2: #hip
+                                text = value.replace("°","")
+                                angle,rom = text.split(" ")
+                                if rom == "extension":		
+                                    if float(angle) >25:
+                                        #change text color to red
+                                        print('true')
+                                elif rom == "flexion":		
+                                    if float(angle) >25:
+                                        #change text color to red
+                                        print('true')	
+                            if col == 3:#knee
+                                text = value.replace("°","")
+                                angle,rom = text.split(" ")
+                                if rom == "extension":		
+                                    if float(angle) >5:
+                                        #change text color to red
+                                        print('true')
+                                elif rom == "flexion":		
+                                    if float(angle) >65:
+                                        #change text color to red
+                                        print('true')
+                            if col == 4:#ankle
+                                text = value.replace("°","")
+                                angle,rom = text.split(" ")
+                                if rom == "dorsiflexion":		
+                                    if float(angle) >10:
+                                        #change text color to red
+                                        print('true')
+                                elif rom == "planarflexion":		
+                                    if float(angle) >25:
+                                        #change text color to red
+                                        print('true')	
+                            if col == 5 and value:  # Check if column is 'Image' and value is not None
+                                image_file_path2 = f'../Data Inputs/insole_rep/{leg}/{value}.png'  # Use 'value' directly for image path
+
+                                try:
+                                    # Load and resize image using PIL
+                                    image_pil = Image.open(image_file_path2)
+                                    image_resized = image_pil.resize((175, 175))
+                                    image_tk = ImageTk.PhotoImage(image_resized)
+                                    # Create a label to display the image
+                                    image_label = tk.Label(inner_frame, image=image_tk)
+                                    image_label.image = image_tk  # Keep reference to the image to prevent garbage collection
+                                    image_label.grid(row=row_num, column=col, padx=10, pady=5)
+                                except Exception as e:
+                                    print(f"Error loading image: {e}")
+                            
 
                     # Update the scroll region of the canvas
                     inner_frame.update_idletasks()
@@ -1624,110 +1741,191 @@ class Process_Table(ttk.Frame):
                 # If it's a file, remove it
                 os.remove(item_path)
 
-    def calculate_angle(self, a, b, c):
-        ab = b - a
-        bc = c - b
-        dot_product = np.dot(ab, bc)
-        magnitude_ab = np.linalg.norm(ab)
-        magnitude_bc = np.linalg.norm(bc)
-        if magnitude_ab == 0 or magnitude_bc == 0:
-            return None  # Avoid division by zero
-        angle_radians = np.arccos(dot_product / (magnitude_ab * magnitude_bc))
-        angle_degrees = np.degrees(angle_radians)
+    def calculate_angle_hip(self, side, a, b, c):
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
 
-        return angle_degrees
-            
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
+
+        new_angle = 180 - angle
+        if side == "Right":
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} Extension"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} Flexion"
+        else:
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} Flexion"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} Extension"
+
+        return final_angle
+
+    def calculate_angle_knee(self, side, a, b, c):
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
+
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
+
+        new_angle = 180 - angle
+
+        if side == "Right":
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} Flexion"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} Extension"
+        else:
+            if new_angle < 0:
+                final_angle = f"{round(abs(new_angle), 2)} Extension"
+            else:
+                final_angle = f"{round(abs(new_angle), 2)} Flexion"
+
+        return final_angle
+
+    def calculate_angle_ankle(self, side, a, b, c):
+        a = np.array(a)
+        b = np.array(b)
+        c = np.array(c)
+
+        radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+        angle = np.abs(radians*180.0/np.pi)
+
+        if side == "Right":
+            new_angle = 90 - angle
+        else:
+            new_angle = 90 - (360 - angle)
+        
+        if new_angle < 0:
+            if abs(new_angle) > 40:
+                new_angle += 40
+            elif abs(new_angle) > 30:
+                new_angle += 30
+            elif abs(new_angle) > 20:
+                new_angle += 20
+            elif abs(new_angle) > 10:
+                new_angle += 10
+            final_angle = f"{round(abs(new_angle), 2)} Plantarflexion"
+        else:
+
+            if abs(new_angle) > 40:
+                new_angle -= 40
+            elif abs(new_angle) > 30:
+                new_angle -= 30
+            elif abs(new_angle) > 20:
+                new_angle -= 20
+            elif abs(new_angle) > 10:
+                new_angle -= 10
+            final_angle = f"{round(abs(new_angle), 2)} Dorsiflexion"
+
+        return final_angle
+        
     def crop_vid(self, side, folder_path):
         output_folder = f'Data_process/{side}'
         os.makedirs(output_folder, exist_ok=True)
         
         mp_pose = mp.solutions.pose
-        pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.8)
+        pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
-        total_items = len([name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name)) and name.endswith('.jpg')])
+        file_list = sorted([name for name in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, name)) and name.endswith('.jpg')])
+        total_items = len(file_list)
 
-        for file in os.listdir(folder_path):
-            if file.endswith(".jpg"):
-                frame_path = os.path.join(folder_path, file)
-                frame_number = int(file.split(".")[0])
+        for i, file in enumerate(file_list):
+            frame_path = os.path.join(folder_path, file)
+            frame_number = i
 
-                frame = cv2.imread(frame_path)
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cv2.imread(frame_path)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-                results = pose.process(frame_rgb)
+            results = pose.process(frame_rgb)
 
-                if results.pose_landmarks:
-                    mp_drawing = mp.solutions.drawing_utils
-                    mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            if results.pose_landmarks:
+                mp_drawing = mp.solutions.drawing_utils
+                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-                    landmarks = results.pose_landmarks.landmark
+                landmarks = results.pose_landmarks.landmark
 
-                    left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
-                    left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
-                    left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
+                left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
+                left_ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
+                left_foot_tip = landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value]
 
-                    right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
-                    right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
-                    right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
+                right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value]
+                right_ankle = landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value]
+                right_foot_tip = landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value]
 
-                    if side == 'Right':
-                        hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
-                        knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
-                        ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
-                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
-                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
-                    else:
-                        hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
-                        knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
-                        ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
-                        shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
-                        foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
-
-                    if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
-                        x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
-                        y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
-                        x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
-                        y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
-
-                        bounding_box_content = frame[y_min:y_max, x_min:x_max]
-
-                        imgWhite = np.ones((500, 500, 3), np.uint8) * 255
-
-                        # Resize and adjust the bounding box content
-                        if bounding_box_content.size > 0:
-                            content_height, content_width, _ = bounding_box_content.shape
-                            aspect_ratio = content_height / content_width
-
-                            if aspect_ratio > 1:
-                                k = 500 / content_height
-                                wCal = math.ceil(k * content_width)
-                                imgResize = cv2.resize(bounding_box_content, (wCal, 500))
-                                wGap = math.ceil((500 - wCal) / 2)
-                                if imgResize.shape[1] < 500:
-                                    imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
-                                else:
-                                    imgWhite[:, :] = imgResize[:, :500]
-                            else:
-                                k = 500 / content_width
-                                hCal = math.ceil(k * content_height)
-                                imgResize = cv2.resize(bounding_box_content, (500, hCal))
-                                hGap = math.ceil((500 - hCal) / 2)
-                                if imgResize.shape[0] < 500:
-                                    imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
-                                else:
-                                    imgWhite[:, :] = imgResize[:500, :]
-
-                            file_name = f"{frame_number}.jpg"
-                            file_path = os.path.join(output_folder, file_name)
-                            cv2.imwrite(file_path, imgWhite)
-
-                            hip_angle = round(self.calculate_angle(shoulder, hip, knee), 2)
-                            knee_angle = round(self.calculate_angle(hip, knee, ankle), 2)
-                            ankle_angle = round(self.calculate_angle(foot_index, ankle, knee), 2)
-                            self.angles_dict[side][frame_number] = {'hip': f"{hip_angle}°", 'knee': f"{knee_angle}°", 'ankle': f"{ankle_angle}°"}
-
-                self.percent_label.config(text=f"{side} side, currently processing: {frame_number}")
+                if side == "Right":
+                    # Right Side Landmarks Indices
+                    hip = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y])
+                    knee = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y])
+                    ankle = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y])
+                    shoulder = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y])
+                    foot_index = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_FOOT_INDEX.value].y])
+                    heel = np.array([landmarks[mp_pose.PoseLandmark.RIGHT_HEEL.value].x, landmarks[mp_pose.PoseLandmark.RIGHT_HEEL.value].y])
+                    
+                else:
+                    # Left Side Landmarks Indices
+                    hip = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y])
+                    knee = np.array([landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y])
+                    ankle = np.array([landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y])
+                    shoulder = np.array([landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y])
+                    foot_index = np.array([landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].x, landmarks[mp_pose.PoseLandmark.LEFT_FOOT_INDEX.value].y])
+                    heel = np.array([landmarks[mp_pose.PoseLandmark.LEFT_HEEL.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HEEL.value].y])
+                    
                 
+                if left_hip and left_ankle and left_foot_tip and right_hip and right_ankle and right_foot_tip:
+                    x_min = int(min(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) - 70
+                    y_min = int(min(left_hip.y, right_hip.y) * frame.shape[0]) - 70
+                    x_max = int(max(left_ankle.x, right_ankle.x, left_foot_tip.x, right_foot_tip.x) * frame.shape[1]) + 70
+                    y_max = int(max(left_ankle.y, right_ankle.y, left_foot_tip.y, right_foot_tip.y) * frame.shape[0]) + 60
+
+                    bounding_box_content = frame[y_min:y_max, x_min:x_max]
+
+                    imgWhite = np.ones((500, 500, 3), np.uint8) * 255
+
+                    # Resize and adjust the bounding box content
+                    if bounding_box_content.size > 0:
+                        content_height, content_width, _ = bounding_box_content.shape
+                        aspect_ratio = content_height / content_width
+
+                        if aspect_ratio > 1:
+                            k = 500 / content_height
+                            wCal = math.ceil(k * content_width)
+                            imgResize = cv2.resize(bounding_box_content, (wCal, 500))
+                            wGap = math.ceil((500 - wCal) / 2)
+                            if imgResize.shape[1] < 500:
+                                imgWhite[:, wGap:wGap + imgResize.shape[1]] = imgResize
+                            else:
+                                imgWhite[:, :] = imgResize[:, :500]
+                        else:
+                            k = 500 / content_width
+                            hCal = math.ceil(k * content_height)
+                            imgResize = cv2.resize(bounding_box_content, (500, hCal))
+                            hGap = math.ceil((500 - hCal) / 2)
+                            if imgResize.shape[0] < 500:
+                                imgWhite[hGap:hGap + imgResize.shape[0], :] = imgResize
+                            else:
+                                imgWhite[:, :] = imgResize[:500, :]
+
+                        file_name = f"{frame_number}.jpg"
+                        file_path = os.path.join(output_folder, file_name)
+                        cv2.imwrite(file_path, imgWhite)
+                        
+                        # Calculate the midpoint between foot_index and heel, 70% closer to heel
+                        new_landmark = heel - 0.2 * (heel - foot_index)
+                        
+                        # Calculate angles
+                        hip_angle = calculate_angle_hip(side, shoulder, hip, knee)
+                        knee_angle = calculate_angle_knee(side, hip, knee, ankle)
+                        ankle_angle = calculate_angle_ankle(side, ankle, new_landmark, foot_index)
+                        
+                        self.angles_dict[side][frame_number] = {'hip': f"{hip_angle}", 'knee': f"{knee_angle}", 'ankle': f"{ankle_angle}"}
+
+                self.percent_label.config(text=f"{side} side, currently processing: {round((frame_number/total_items), 1) * 100}%")
+
+
     def video_to_image(self):
         if self.master.side_state['Right'] == 1:
             self.crop_vid('Right', 'Data_process/Right_frames')
@@ -1736,6 +1934,18 @@ class Process_Table(ttk.Frame):
 
         # After the video processing is done, start processing images
         self.process_images()
+
+    def process_images(self):
+        # Load models for Left and Right
+
+        if self.master.side_state['Right'] == 1:
+            self.right_model = self.load_model_for_side('Right')
+            self.process_images_for_side('Right', self.right_model)
+        if self.master.side_state['Left'] == 1:
+            self.left_model = self.load_model_for_side('Left')
+            self.process_images_for_side('Left', self.left_model)
+        # Switch to the table frame for further actions
+        self.table_frame()
 
         #add additional code here (Processing Part)
     def process_images(self):
@@ -1764,7 +1974,7 @@ class Process_Table(ttk.Frame):
         self.title_Assessment = ttk.Label(self.main_assessment_frame, text= "Gait Assessment Table", font= ('raleway', 20, 'bold'), bootstyle = 'inverse-light')
         self.title_Assessment.grid(row = 0, column = 0, pady = (20, 20))
 
-        self.current_Patient = ttk.Label(self.main_assessment_frame, text= "Current Patient: 20-050146", font= ('montserrat', 14, 'bold'), bootstyle = 'inverse-light')
+        self.current_Patient = ttk.Label(self.main_assessment_frame, text= f'Current Patient: {self.master.current_patient_id}', font= ('montserrat', 14, 'bold'), bootstyle = 'inverse-light')
         self.current_Patient.grid(row = 1, column = 0 ,pady = (0, 20))
 
         #add a frame for tools
@@ -1792,32 +2002,45 @@ class Process_Table(ttk.Frame):
         self.side_selector_label = ttk.Label(self.tool_frame_2, text = "Current Leg: ", font=('raleway', 14, 'bold'), bootstyle = 'inverse-light')
         self.side_selector_label.pack(side= tk.LEFT, padx = (20, 10))
         self.side_selector.pack(side= tk.LEFT, padx = (10, 20))
-
-        #label
-        self.side_label = ttk.Label(self.tool_frame_2, text = "Gait Phase: ", font=('raleway', 14, 'bold'), bootstyle = 'inverse-light')
+        
+        self.side_label = ttk.Label(self.tool_frame_2, text="Gait Phase:", font=('raleway', 14, 'bold'), bootstyle = 'inverse-light')
         self.side_label.pack(side= tk.LEFT, padx = (20, 10))
+        
+        self.phase_selector = ttk.Combobox(self.tool_frame_2, values=["Initial Contact (1)", "Loading Response (2)", "Midstance (3)", "Terminal Stance (4)", "Pre-Swing (5)", "Initial Swing (6)", "Midswing (7)", "Terminal swing (8)"], state='readonly', width=20)
+        self.phase_selector.set("Initial Contact (1)")  # Set initial value
+        self.phase_selector.pack(side= tk.LEFT, padx = (20, 10))
+        
+        #label
+        #self.side_label = ttk.Label(self.tool_frame_2, text = "Gait Phase: ", font=('raleway', 14, 'bold'), bootstyle = 'inverse-light')
+        #self.side_label.pack(side= tk.LEFT, padx = (20, 10))
 
         # Create a Combobox to select phase number
-        self.phase_number_var = tk.StringVar()
-        self.phase_number_var.set('1')  # Default value
-        self.phase_selector = ttk.Combobox(self.tool_frame_2, textvariable=self.phase_number_var, values=[str(i) for i in range(1, 9)], state="readonly")
-        self.phase_selector.pack(side= tk.LEFT, padx = (20, 10))
+        #self.phase_number_var = tk.StringVar()
+        #self.phase_number_var.set('1')  # Default value
+        #self.phase_selector = ttk.Combobox(self.tool_frame_2, textvariable=self.phase_number_var, values=[str(i) for i in range(1, 9)], state="readonly")
+        #self.phase_selector.pack(side= tk.LEFT, padx = (20, 10))
 
         #search button
         self.search_button = ttk.Button(self.tool_frame_2, text="", image= self.master.search_icon, command= "", takefocus= False, cursor= 'hand2')
         self.search_button.pack(side = tk.LEFT, padx = 20)
 
         # Button to populate the table
-        self.populate_button = ttk.Button(self.tool_frame_2, text="Populate Table", bootstyle = 'primary', style='search.TButton'
+        self.populate_button = ttk.Button(self.tool_frame_2, text="Populate Table", bootstyle = 'primary', style='main.TButton'
                                           , takefocus= False, cursor = 'hand2', 
                                           command = self.update_table) #add command to populate table
         self.populate_button.pack(side= tk.RIGHT, padx = (20, 10))
 
         # Button to send data
-        self.send_button = ttk.Button(self.tool_frame_2, text="Send", bootstyle = 'primary', style='search.TButton'
+        self.send_button = ttk.Button(self.tool_frame_2, text="Send", bootstyle = 'primary', style='main.TButton'
                                           , takefocus= False, cursor = 'hand2', 
                                           command = self.send_data) #add command to send data
-        self.send_button.pack(side= tk.RIGHT, padx = (0, 20))
+        self.send_button.pack(side= tk.RIGHT, padx = (0, 10))
+        
+        # Go-back to menu_bar
+        self.end_button = ttk.Button(self.tool_frame_2, text="Go back", bootstyle = 'danger', style='danger.TButton'
+                                          , takefocus= False, cursor = 'hand2', 
+                                          command = lambda: self.master.change_frame(self, MenuBar))
+        self.end_button.pack(side= tk.RIGHT, padx = (10, 20))
 
         self.frame_canvas = ttk.Frame(self.main_assessment_frame, borderwidth= 0, bootstyle = 'light')
         self.frame_canvas.grid(row = 3, column= 0, padx = 10, pady = 10, sticky= 'nsew')
@@ -1826,7 +2049,7 @@ class Process_Table(ttk.Frame):
         self.frame_canvas.grid_rowconfigure(0, weight = 1)
 
         # Create a canvas and attach a scrollbar to it
-        self.canvas = tk.Canvas(self.frame_canvas)
+        self.canvas = tk.Canvas(self.frame_canvas, height= 700)
         self.canvas.grid(row=0, column=0, sticky='nsew', padx = 10, pady = 10)
 
         self.scrollbar = ttk.Scrollbar(self.frame_canvas, orient='vertical', command=self.canvas.yview)
@@ -1834,10 +2057,14 @@ class Process_Table(ttk.Frame):
 
         # Configure the canvas to utilize the scrollbar
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
+        
         # Create a frame to contain all widgets
         self.scrollable_frame = tk.Frame(self.canvas)
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor='nw', width=1920)
+        
+        self.scrollable_frame.grid_columnconfigure(0, weight = 1)
+        self.scrollable_frame.grid_rowconfigure(0, weight = 1)
+        
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor='nw', width=1800)
 
         # Update scroll region when the size of the frame changes
         self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
@@ -1847,13 +2074,39 @@ class Process_Table(ttk.Frame):
 
         # Create a frame for the table-like structure
         self.table_frame = tk.Frame(self.scrollable_frame)
-        self.table_frame.grid(row=0, column=0)
+        
+        self.table_frame.grid_columnconfigure(0, weight = 2)
+        self.table_frame.grid_columnconfigure(1, weight = 2)
+        self.table_frame.grid_columnconfigure(2, weight = 3)
+        self.table_frame.grid_columnconfigure(3, weight = 3)
+        self.table_frame.grid_columnconfigure(4, weight = 3)
+        self.table_frame.grid_columnconfigure(5, weight = 2)
+        
+        self.table_frame.grid(row=0, column=0, sticky='nsew', padx = 80, pady= 20)
+        
+        # Define headings
+        headings = ['Frame Image', 'Frame Num', 'ROM Hips', 'ROM Knees', 'ROM Ankle', 'Insole']
+
+        # Create labels for headings with font size 20
+        for col, heading in enumerate(headings):
+            heading_label = tk.Label(self.table_frame, text=heading, font=('raleway', 18, 'bold'),
+                                     borderwidth=1, relief='solid')
+            heading_label.grid(row=0, column=col, sticky="nsew")
+        
         
     def send_data(self): #run ONLY ONCE
-        global mycursor,mydb
+        conn = mysql.connector.connect(
+        host = "localhost",
+	    user= "gaitrpi",
+        password = "gait123",
+	    database="gaitdata"
+        )
+
+        mycursor = conn.cursor(buffered=True)
         client_id = self.master.current_patient_id
-        #TODO: get date, and determine if an assessment is performed before this one, if no assessment performed on date, set assessment value as 1, RUN ONCE
+        #DONE: get date, and determine if an assessment is performed before this one, if no assessment performed on date, set assessment value as 1, RUN ONCE
         date = datetime.today().strftime('%Y-%m-%d')
+        #date = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
         #print(date)
         sql = "SELECT assessment_num from assessment WHERE date_time=%s ORDER BY assessment_num DESC" #get the highest assessment number 
         val = (date,)
@@ -1864,12 +2117,12 @@ class Process_Table(ttk.Frame):
         else:
             assessment_num = 1
         
-        #TODO: move img from data_process to Database folder, directory is as follows, RUN ONCE
+        #DONE: move img from data_process to Database folder, directory is as follows, RUN ONCE
         #DIR: Database/client_id/date(YYYYMMDD)/assessment_num/(Left/Right)/frame_num.jpg
         target_path = f"Database/{client_id}/{date}/{assessment_num}"
         #PS: IF directory specified does not exists, create dir
         
-        #TODO: forloop this shit
+        #DONE: forloop this shit
         # Iterate over each row
         count = 0
         for row in self.phase_frames:
@@ -1899,13 +2152,13 @@ class Process_Table(ttk.Frame):
         print('moved files')
             
         #commit changes and close
-        mydb.commit()
+        conn.commit()
         print(f"sent {count} data")
         messagebox.showinfo(f"Sent data", "Data Saved")
         self.master.change_frame(self, Again)
 
     def load_model_for_side(self, side):
-        return load_model(f'../Data Inputs/models/{side}_model.h5')
+        return load_model(f'../Data Inputs/models/{side}_official.h5')
     
     def process_images_for_side(self, side, model):
         test_data_dir = f'Data_process/{side}'
@@ -1958,26 +2211,31 @@ class Process_Table(ttk.Frame):
     
     def update_table(self):
         current_side = self.side_var.get()
-        phase_number = int(self.phase_number_var.get())
+        phase_number = self.phase_selector.get()
+
+        # Extract the phase number using regular expressions
+        phase_number_match = re.search(r'\d+', phase_number)
+
+        # Check if a number is found
+        if phase_number_match:
+            # Extract the phase number as an integer
+            phase = int(phase_number_match.group())
+        else:
+            # Handle the case when no number is found (default to 1)
+            phase = 1 
 
         if current_side == 'Left':
-            self.populate_table_frame(self.table_frame, "Left", phase_number)
+            self.populate_table_frame(self.table_frame, "Left", phase)
         else:
-            self.populate_table_frame(self.table_frame, "Right", phase_number)
+            self.populate_table_frame(self.table_frame, "Right", phase)
     
     def populate_table_frame(self, table_frame, select_side, phase_number):
         # Clear existing widgets from table_frame
+        
         for widget in table_frame.winfo_children():
-            widget.destroy()
-
-        # Define headings
-        headings = ['Frame Image', 'Frame Num', 'ROM Hips', 'ROM Knees', 'ROM Ankle', 'Insole']
-
-        # Create labels for headings with font size 20
-        for col, heading in enumerate(headings):
-            heading_label = tk.Label(table_frame, text=heading, font=('Helvetica', 24, 'bold'),
-                                     borderwidth=1, relief='solid')
-            heading_label.grid(row=0, column=col, sticky="nsew")
+            if widget.grid_info()['row'] != 0:
+                widget.destroy()
+        
         
         #filter dictionary
         #for x in self.phase_frames:
@@ -1989,6 +2247,7 @@ class Process_Table(ttk.Frame):
         for x in filtered_dict:
             print(x)
         #print(f"Filtered Data: {len(filtered_dict)} entries")
+        
         # Iterate over phase_frames and populate the table-like structure
         for row, frame_info in enumerate(filtered_dict):
             
@@ -1998,31 +2257,67 @@ class Process_Table(ttk.Frame):
             rom_a = frame_info['rom_a']
             insole = frame_info['insole']
             frame_num = frame_info['frame_name']
+            
             # Display image
             img = Image.open(image_path)
             img.thumbnail((175, 175))  # Resize image if necessary
             img = ImageTk.PhotoImage(img)
             img_label = tk.Label(table_frame, image=img, borderwidth=1, relief='solid')
             img_label.image = img  # Keep reference to avoid garbage collection
-            img_label.grid(row=row, column=0, sticky="nsew")
+            img_label.grid(row=row+1, column=0, sticky="nsew", ipadx = 10, ipady = 10)
 
             # Display other information with font size 20
-            tk.Label(table_frame, text=frame_num, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=1, sticky="nsew")
-            tk.Label(table_frame, text=rom_h, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=2, sticky="nsew")
-            tk.Label(table_frame, text=rom_k, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=3, sticky="nsew")
-            tk.Label(table_frame, text=rom_a, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=4, sticky="nsew")
-            tk.Label(table_frame, text=insole, font=('Helvetica', 20), borderwidth=1, relief='solid').grid(row=row, column=5, sticky="nsew")
+            tk.Label(table_frame, text=frame_num, font=('montserrat', 20), borderwidth=1, relief='solid').grid(row=row+1, column=1, sticky="nsew")
+            tk.Label(table_frame, text=rom_h, font=('montserrat', 20), borderwidth=1, relief='solid').grid(row=row+1, column=2, sticky="nsew") #change text color if value exceeds 
+            tk.Label(table_frame, text=rom_k, font=('montserrat', 20), borderwidth=1, relief='solid').grid(row=row+1, column=3, sticky="nsew") #change text color if value exceeds
+            tk.Label(table_frame, text=rom_a, font=('montserrat', 20), borderwidth=1, relief='solid').grid(row=row+1, column=4, sticky="nsew") #change text color if value exceeds
+            #tk.Label(table_frame, text=insole, font=('montserrat', 20), borderwidth=1, relief='solid').grid(row=row+1, column=5, sticky="nsew")
             
+            #TODO Change color to red
+            text = rom_h.replace("°","") #hip
+            angle,rom = text.split(" ")
+            if rom == "extension":		
+                if float(angle) >25:
+                    #change text color to red
+                    print('true')
+            elif rom == "flexion":		
+                if float(angle) >25:
+                    #change text color to red
+                    print('true')
+                    	
+            text = rom_k.replace("°","")#knee
+            angle,rom = text.split(" ")
+            if rom == "extension":		
+                if float(angle) >5:
+                    #change text color to red
+                    print('true')
+            elif rom == "flexion":		
+                if float(angle) >65:
+                    #change text color to red
+                    print('true')
+                    
+            text = rom_a.replace("°","")#ankle
+            angle,rom = text.split(" ")
+            if rom == "dorsiflexion":		
+                if float(angle) >10:
+                    #change text color to red
+                    print('true')
+            elif rom == "planarflexion":		
+                if float(angle) >25:
+                    #change text color to red
+                    print('true')
+    
             # Display image
-           # img2 = Image.open(insole)
-           # img2.thumbnail((175, 175))  # Resize image if necessary
-           # img2 = ImageTk.PhotoImage(img2)
-           # img_label2 = tk.Label(table_frame, image=img2, borderwidth=1, relief='solid')
-           # img_label2.image = img2  # Keep reference to avoid garbage collection
-           # img_label2.grid(row=row, column=5, sticky="nsew")
+            img2 = Image.open(f'../Data Inputs/insole_rep/{frame_info["side"]}/{insole}.png')
+            img2.thumbnail((175, 175))  # Resize image if necessary
+            img2 = ImageTk.PhotoImage(img2)
+            img_label2 = tk.Label(table_frame, image=img2, borderwidth=1, relief='solid')
+            img_label2.image = img2  # Keep reference to avoid garbage collection
+            img_label2.grid(row=row+1, column=5, sticky="nsew")
         
 
 if __name__ == "__main__":
     app = refApp((1920, 1080))
     app.state('normal')
+    app.attributes('-zoomed', True)
     app.mainloop()

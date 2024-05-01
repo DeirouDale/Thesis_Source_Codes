@@ -203,9 +203,6 @@ class MenuBar(ttk.Frame):
         self.style = style
         self.start_time = time.time()
         
-        #self.scan_esp_thread = threading.Thread(target=self.detect_esp, daemon=True)
-        #self.scan_esp_thread.start()
-        
         self.esp_status = None
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -265,21 +262,17 @@ class MenuBar(ttk.Frame):
         self.StartAssessment()
         
     def detect_esp(self):
-        while True:
-            current_time = time.time()
-            elapsed_time = current_time - self.start_time
-            if elapsed_time >= 30:
-                response1 = os.system("ping -c 1 192.168.0.184")
-                response2 = os.system("ping -c 1 192.168.0.171")
-                if response1 == 0 and response2 == 0:
-                    #detect
-                    self.esp_status = "Detected"
-                    self.insole_label.config(text= f"Status: {self.esp_status}")
-                else:
-                    #not fully detected
-                    self.esp_status = "Not Detected"
-                    self.insole_label.config(text= f"Status: {self.esp_status}")
-                self.start_time = current_time
+        response1 = os.system("ping -c 1 192.168.0.184")
+        response2 = os.system("ping -c 1 192.168.0.171")
+        if response1 == 0 and response2 == 0:
+            #detect
+            self.esp_status = "Detected"
+            self.insole_label.config(text= f"Status: {self.esp_status}")
+        else:
+            #not fully detected
+            self.esp_status = "Not Detected"
+            self.insole_label.config(text= f"Status: {self.esp_status}")
+
             
     #frame 1 -----> Start Assessment of the Patients
     def StartAssessment(self):
@@ -378,7 +371,13 @@ class MenuBar(ttk.Frame):
             
             self.patient_num.config(text= f"Patient Number: {self.master.current_patient_id}")
             self.patient_name.config(text= f"Patient Name: {self.master.current_patient}")
-            self.proceed_button.config(state = 'normal')
+            
+            self.detect_esp()
+            #detect if esp is connected, if not disable assessment button
+            if self.esp_status == "Detected":
+                self.proceed_button.config(state = 'normal')
+            else:
+                self.proceed_button.config(state = '')
         else:
             messagebox.showerror("Error", "Client ID does not exist!")
             self.master.current_patient = 'None'
@@ -587,8 +586,11 @@ class MenuBar(ttk.Frame):
 
         cursor = conn.cursor()
 
-        # Execute the query to search for patients based on client ID
-        cursor.execute("SELECT client_id, first_name, last_name, age, sex, address, birthdate FROM patient_info WHERE client_id = %s", (search_text,) )
+        # Execute the query to search for patients based on client ID, first name, or last name
+        query = ("SELECT client_id, first_name, last_name, age, sex, address, birthdate "
+                "FROM patient_info "
+                "WHERE client_id = %s OR first_name LIKE %s OR last_name LIKE %s")
+        cursor.execute(query, (search_text, f'%{search_text}%', f'%{search_text}%'))
 
         for row in cursor.fetchall():
             self.table_register_patient.insert('', 'end', values=row + ('',))
@@ -683,8 +685,8 @@ class MenuBar(ttk.Frame):
             query = "SELECT a.client_id, a.date_time, a.assessment_num, p.first_name, p.last_name " \
                     "FROM assessment a " \
                     "INNER JOIN patient_info p ON a.client_id = p.client_id " \
-                    "WHERE a.client_id = %s ORDER BY a.date_time DESC"
-            self.cursor.execute(query, (search_text,))
+                    "WHERE a.client_id = %s OR a.date_time = %s OR assessment_num = %s ORDER BY a.date_time DESC"
+            self.cursor.execute(query, (search_text, search_text, search_text))
             filtered_assessments = self.cursor.fetchall()
 
             displayed_records = set()  # Set to track displayed records
@@ -1233,8 +1235,8 @@ class Side_Cam(ttk.Frame):
         self.leg_button = ttk.Button(self.choose_buttons_frame, text= "START LEFT LEG", width = 18, style = 'main.TButton', takefocus= False,
                                           cursor = "hand2", command= lambda: self.change_button('left'))
         self.leg_button.grid(row = 0, column = 1, padx = (20, 20))
-        self.back_button = ttk.Button(self.choose_buttons_frame, text= "GO BACK", width = 18, style = 'danger.TButton', takefocus= False,
-                                          cursor = "hand2", command= lambda:self.master.change_frame(self, MenuBar))
+        self.back_button = ttk.Button(self.choose_buttons_frame, text= "EXIT", width = 18, style = 'danger.TButton', takefocus= False,
+                                          cursor = "hand2", command= exit_btn)
         self.back_button.grid(row = 0, column = 2, padx = (20, 0))
         
         #video 
@@ -1254,7 +1256,11 @@ class Side_Cam(ttk.Frame):
         #placed into left/right logic
         self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
         self.client_subscriptions(self.client)
-        
+    
+    def exit_btn(self):
+        self.master.side_state['Right'] = 0
+        self.master.side_state['Left'] = 0
+        self.master.change_frame(self, MenuBar)
     def clear_folder(self, folder_path):
         # List all items in the folder
         for item in os.listdir(folder_path):
@@ -1430,11 +1436,11 @@ class Side_Cam(ttk.Frame):
         if self.recording:
             if self.assessment_state == 'left':
                 self.master.frame_numbers_insole['Left'][frame_number] = espdata
-                print(f"Left: {self.frame_number} : {espdata}")
+                #(f"Left: {self.frame_number} : {espdata}")
                 
             else:
                 self.master.frame_numbers_insole['Right'][frame_number] = espdata
-                print(f"Right: {self.frame_number} : {espdata}")
+                #print(f"Right: {self.frame_number} : {espdata}")
     
     def camera_update_thread(self):
         label = ttk.Label(self.web_cam_frame)
@@ -2164,7 +2170,7 @@ class Process_Table(ttk.Frame):
         test_data_dir = f'Data_process/{side}'
         image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
         # Exclude the first 10 and last 10 frames
-        image_files = image_files[1:-1]
+        image_files = image_files[5:-5]
 
         for index, image_file in enumerate(image_files):
             if image_file.endswith('.jpg'):

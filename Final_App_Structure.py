@@ -27,9 +27,6 @@ conn = mysql.connector.connect(
     password = "gait123",
     database="gaitdata"
 )
-
-
-
 class refApp(tk.Tk):
     def __init__(self, size):
         # main setup
@@ -124,7 +121,7 @@ class refApp(tk.Tk):
             self.popup_window.focus()
             return
 
-    def open_popupWindow_reg(self, popup_insteance):
+    def open_popupWindow_reg(self, popup_instance):
             self.popup_window = popup_instance(self.master, self.conn)  # Pass both parent and db_connection arguments
             self.popup_window.grab_set() 
             self.popup_window.wait_window()
@@ -193,13 +190,13 @@ class Title(ttk.Frame):
             self.master.change_frame(self, MenuBar)
         else:
             messagebox.showerror("Error", "Invalid Pin")
-        
+  
 class MenuBar(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
         
         self.conn = mysql.connector.connect(
-            host = "localhost",
+        host = "localhost",
 	    user= "gaitrpi",
 	    password = "gait123",
 	    database="gaitdata"
@@ -282,7 +279,7 @@ class MenuBar(ttk.Frame):
             #not fully detected
             self.esp_status = "Not Detected"
             self.insole_label.config(text= f"Status: {self.esp_status}")
-
+    
             
     #frame 1 -----> Start Assessment of the Patients
     def StartAssessment(self):
@@ -837,7 +834,6 @@ class MenuBar(ttk.Frame):
         # Instantiate popupWindow_Table and pass client_id to it
         self.master.open_popupWindow2(patient_records, client_id, assessment_num, first_name, last_name, dt)
 
-
 class popupWindow_register_add(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
@@ -1221,8 +1217,6 @@ class Side_Cam(ttk.Frame):
         #camera part
         self.assessment_state = ''
         self.assessment_state_text = 'None'
-        self.espdata_test = ''
-        self.esp1_sensor_data = []
         self.flag_connected = 0
         
         self.frame_number = 0
@@ -1309,8 +1303,7 @@ class Side_Cam(ttk.Frame):
         self.flag_connected = 0
         print("Disconnected from MQTT server")
     
-    def enter_key(self):        
-        msg = 'Req_Data'
+    def enter_key(self, msg):        
         pubMsg = self.client.publish(
             topic='rpi/broadcast',
             payload=msg.encode('utf-8'),
@@ -1328,7 +1321,6 @@ class Side_Cam(ttk.Frame):
     def callback_esp32_sensor1(self, client, userdata, msg):
         #this is where I would save the esp data to dictionary where in the key is frame and the out is esp, example: {55: espdata}
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
-        self.espdata_test = str(msg.payload.decode('utf-8'))
 
     def callback_esp32_sensor2(self, client, userdata, msg):
         self.receive_insole(str(msg.payload.decode('utf-8')),self.frame_number)
@@ -1481,15 +1473,15 @@ class Side_Cam(ttk.Frame):
                 photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
                 label.config(image=photo)
                 label.image = photo
-                print(label.winfo_width())
-                print(label.winfo_height())
+                #print(label.winfo_width())
+                #print(label.winfo_height())
                 if label.winfo_exists():
                     label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
                 if self.recording:
                     # Save frame as 
                     
-                    self.enter_key()
+                    self.enter_key('Req_Data')
                     cv2.imwrite(f'Data_process/{self.assessment_state_text}_frames/{self.frame_number}.jpg', frame)
                     
                 ##see current fps
@@ -1510,6 +1502,7 @@ class Side_Cam(ttk.Frame):
         update_frame()
 
     def destroy(self):
+        self.camera_thread.join()
         self.cap.release()  
         super().destroy()
         
@@ -2219,6 +2212,7 @@ class Process_Table(ttk.Frame):
                 predicted_class = int(np.argmax(yhat_single, axis=1))
 
                 # Set default values for angles if key is not found
+                #TODO: swap this to
                 try:
                     if self.master.frame_numbers_insole[side] == 'Left':
                         insole = self.master.frame_numbers_insole[side][frame_num-6] 
@@ -2242,6 +2236,8 @@ class Process_Table(ttk.Frame):
                     'insole': insole
                 })
                 current_percent = int(round((index / len(image_files)) * 100))
+                if current_percent > 100:
+                    current_percent = 100
                 self.percent_label.config(text=f"{side} side, analyzing and classifying data: {current_percent}%")
     def try_me(self,side,frame_num,joint):
         try:
@@ -2373,5 +2369,5 @@ class Process_Table(ttk.Frame):
 if __name__ == "__main__":
     app = refApp((1280, 700))
     app.state('normal')
-    app.attributes('-zoomed', True)
+    app.attributes('-fullscreen', True) #change back to -zoomed if in rpi 
     app.mainloop()

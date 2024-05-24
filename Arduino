@@ -3,7 +3,7 @@
 
 const char* ssid = "4G-MIFI-C90";
 const char* password = "1234567890";
-const char* mqttBroker = "192.168.100.156"; // Change this to your MQTT broker's IP address or hostname
+const char* mqttBroker = "192.168.100.143"; // Change this to your MQTT broker's IP address or hostname
 const int mqttPort = 1883; // MQTT default port
 
 const char* mqttClientId = "fsr_publisher";

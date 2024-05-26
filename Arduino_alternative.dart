@@ -1,12 +1,13 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-const char* ssid = "4G-MIFI-C90";
-const char* password = "1234567890";
-const char* mqttBroker = "192.168.100.143"; // Change this to your MQTT broker's IP address or hostname
+const char* ssid = "DIR-612-ED2B";
+const char* password = "64493930";
+const char* mqttBroker = "192.168.0.143"; // Change this to your MQTT broker's IP address or hostname
+const char* mqttId = "ESP32_client2";//1 is right, 2 is left
+const char* pubId = "esp32/sensor2";
 const int mqttPort = 1883; // MQTT default port
 
-const char* mqttClientId = "fsr_publisher";
 const int fsrPinA = 34;
 const int fsrPinB = 35;
 const int fsrPinC = 32;
@@ -19,7 +20,11 @@ int stateA;
 int stateB;
 int stateC;
 
-int binaryValue;
+int send_flag = 0;
+unsigned long interval = 14; //70 inputs per second
+unsigned long timer;
+unsigned long ref_timer = 0;
+
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
@@ -42,7 +47,7 @@ void setup_mqtt() {
   mqttClient.setServer(mqttBroker, mqttPort);
   while (!mqttClient.connected()) {
     Serial.print("Attempting MQTT connection...");
-    if (mqttClient.connect("ESP32_client2")) {
+    if (mqttClient.connect(mqttId)) {// 2 is left, 1 is right
       Serial.println("connected");
       mqttClient.subscribe("rpi/broadcast");
     } else {
@@ -59,18 +64,28 @@ void callback(char* topic, byte* message, unsigned int length){
   for (int i = 0 ; i< length;i++){
     messageTemp += (char)message[i];
   }
+  Serial.println(messageTemp);
   if(String(topic) == "rpi/broadcast"){
     if(messageTemp == "Req_Data"){
       //send data here
-
       char message[100];
       sprintf(message, "%d%d%d", stateA, stateB, stateC); // Print the binary representation
-      mqttClient.publish("esp32/sensor2", message);
-      Serial.println("Published FSR readings to MQTT");
+      mqttClient.publish(pubId, message); //sensor 2 is left, sensor 1 is right
+      //Serial.println("Published FSR readings to MQTT");
     
+    }
+    if(messageTemp == "Start"){
+      //set reference timer 
+      ref_timer = millis();
+      send_flag = 1;
+    }
+    if(messageTemp == "Stop"){
+      //send collated data here
+      send_flag = 0;
     }
   }
 }
+
 void setup() {
   Serial.begin(115200);
   pinMode(fsrPinA, INPUT_PULLUP);
@@ -83,6 +98,8 @@ void setup() {
 }
 
 void loop() {
+  if (millis() - timer >= interval) {
+  timer = millis();
   fsrValueA = analogRead(fsrPinA);
   fsrValueB = analogRead(fsrPinB);
   fsrValueC = analogRead(fsrPinC);
@@ -91,11 +108,15 @@ void loop() {
   stateA = (fsrValueA > 1228) ? 1 : 0;  // A (MSB)
   stateB = (fsrValueB > 1228) ? 1 : 0;  // B (middle)
   stateC = (fsrValueC > 1228) ? 1 : 0;  // C (LSB)
-
   // Create a binary value (000 to 111)
-  binaryValue = (stateA << 2) | (stateB << 1) | stateC;
-
+  //Serial.println(String(timer2)+" "+String(stateA)+String(stateB)+String(stateC));
+  char message[100];
+  sprintf(message, "(%d,%d%d%d)",millis()-ref_timer,stateA,stateB,stateC);
+  if(send_flag == 1){
+  mqttClient.publish(pubId, message);
+  }
   mqttClient.loop();
+  }
 }
 
 // unsigned long interval = 142.857142857;

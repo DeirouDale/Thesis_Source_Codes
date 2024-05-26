@@ -1283,7 +1283,8 @@ class Side_Cam(ttk.Frame):
         #placed into left/right logic
         self.client.message_callback_add('rpi/broadcast', self.callback_rpi_broadcast)
         self.client_subscriptions(self.client)
-
+        self.client.connect('192.168.0.143',1883) # connect to mqtt
+        self.client.loop_start()
         
         
     def clear_folder(self, folder_path):
@@ -1419,9 +1420,6 @@ class Side_Cam(ttk.Frame):
                 self.recording = True
                 self.record_label.configure(text="Press Stop to Start Recording")
                 self.frame_number = 0
-                
-                self.client.connect('192.168.0.143',1883) # connect to mqtt
-                self.client.loop_start()
                 if self.assessment_state == 'left':
                     self.left_focus_sensor()
                 if self.assessment_state == 'right':
@@ -1436,7 +1434,7 @@ class Side_Cam(ttk.Frame):
                 # self.client.loop_stop()
                 #state is 'left' or 'right'
                 self.recording = False
-                self.enter_key("Stop")
+                self.enter_key("Stop") #stop recieving signals from esp
                 self.record_label.config(text="<Space> to Start Recording")
                 # Frame Number go back to 0
                 self.change_button('choose_other')
@@ -1448,7 +1446,7 @@ class Side_Cam(ttk.Frame):
                 self.out.release()
                 self.out = None
 
-    def receive_insole(self, espdata, frame_number):
+    def receive_insole(self, espdata):
         
         if self.recording:
             if self.assessment_state == 'left':
@@ -1523,19 +1521,19 @@ class Side_Cam(ttk.Frame):
         
     def destroy(self):
         #sync timestamps
-        print(len(self.left_frame_timestamp))
-        print(len(self.esp_data_left))
+        #print(len(self.left_frame_timestamp))
+        #print(len(self.esp_data_left))
         if self.left_frame_timestamp: #if left side is recorded
             esp_data_left = list(map(eval,self.esp_data_left))#remove string
             self.master.synced_left = self.sync_timestamp(self.left_frame_timestamp,esp_data_left)
-            print("Left")
-            print(*self.master.synced_left, sep="\n")
+            #print("Left")
+            #print(*self.master.synced_left, sep="\n")
 
         if self.right_frame_timestamp:#if right side is recorded
             esp_data_right= list(map(eval,self.esp_data_right)) #remove string
             self.master.synced_right = self.sync_timestamp(self.right_frame_timestamp,esp_data_right) 
-            print("Right")
-            print(*self.master.synced_right, sep="\n")
+            #print("Right")
+            #print(*self.master.synced_right, sep="\n")
         #end syncing
         self.client.disconnect() #disconnect
         self.client.loop_stop()       

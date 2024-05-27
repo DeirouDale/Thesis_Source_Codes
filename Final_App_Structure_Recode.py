@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, PhotoImage
 from tkinter import ttk, messagebox, PhotoImage
-from tkinter import *
 from PIL import Image, ImageTk
 import cv2
 import mediapipe as mp
@@ -10,6 +9,7 @@ import numpy as np
 import math 
 from tensorflow.keras.models import load_model
 import threading
+import multiprocessing
 from tkcalendar import Calendar, DateEntry
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
@@ -27,6 +27,7 @@ conn = mysql.connector.connect(
     password = "gait123",
     database="gaitdata"
 )
+process_event = multiprocessing.Event()
 class refApp(tk.Tk):
     def __init__(self, size):
         # main setup
@@ -139,8 +140,11 @@ class refApp(tk.Tk):
         #new frame will show
         self.next_frame_class = next_frame_class
         self.current_frame = self.next_frame_class(self, self.style)
-        self.current_frame.pack(fill='both', expand=True)
         
+        if isinstance(self.current_frame, MenuBar):
+            self.current_frame.pack()
+        else:
+            self.current_frame.pack(fill='both', expand=True)    
         if isinstance(current_frame, Side_Cam):
             current_frame.destroy()
 
@@ -192,6 +196,29 @@ class Title(ttk.Frame):
         else:
             messagebox.showerror("Error", "Invalid Pin")
   
+def detect_esp(queue,flag): #run every 5 seconds
+    global process_event
+    print("Starting process")
+    timer = time.time()
+    while True:
+        if time.time() - timer >2:
+            timer = time.time()
+            print("Detecting esp")        
+            response1 = os.system("ping -c 1 -w 1 192.168.0.184 >/dev/null 2>&1")
+            response2 = os.system("ping -c 1 -w 1 192.168.0.171 >/dev/null 2>&1")
+            if response1 == 0 and response2 == 0:
+                #detect
+                esp_status = "Detected"
+            else:
+                #not fully detected
+                esp_status = "Not Detected"
+                #self.insole_label.config(text= f"Status: {self.esp_status}")
+            queue.put(esp_status)
+        if flag == 0 or process_event.is_set():
+            print("Killing process")
+            queue.put("Stop")
+            break
+
 class MenuBar(ttk.Frame):
     def __init__(self, parent, style):
         super().__init__(parent)
@@ -209,7 +236,7 @@ class MenuBar(ttk.Frame):
         self.client_id = None
         self.style = style
         self.start_time = time.time()
-        
+        self.esp_detect = 0
         self.esp_status = None
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -257,7 +284,7 @@ class MenuBar(ttk.Frame):
         #Log out 
         self.Log_out = ttk.Button(self.navigation_frame, image= self.master.log_out_icon, text= "Log out",  
                                             cursor = "hand2", compound = "left", style = 'light.TButton', takefocus= False,
-                                            command = lambda: self.master.change_frame(self, Title))
+                                            command = lambda: [self.stop_esp(),self.master.change_frame(self, Title)])
         self.Log_out.grid(row=7, column=0, pady=(5, 20), sticky="ews")
 
         self.main_frame = ttk.Frame(self, borderwidth=0, bootstyle = 'light')
@@ -268,23 +295,12 @@ class MenuBar(ttk.Frame):
 
         self.StartAssessment()
         
-    def detect_esp(self):
-        response1 = os.system("ping -c 1 192.168.0.184")
-        response2 = os.system("ping -c 1 192.168.0.171")
-        if response1 == 0 and response2 == 0:
-            #detect
-            self.esp_status = "Detected"
-            self.insole_label.config(text= f"Status: {self.esp_status}")
-        else:
-            #not fully detected
-            self.esp_status = "Not Detected"
-            self.insole_label.config(text= f"Status: {self.esp_status}")
-    
+
+
             
     #frame 1 -----> Start Assessment of the Patients
     def StartAssessment(self):
-        
-        
+        global process_event
         self.StartAssessment_frame = ttk.Frame(self.main_frame, borderwidth=0, bootstyle= 'light')
         self.StartAssessment_frame.grid(row = 0, column = 0, padx = 20, pady = 20, sticky= "nsew")
 
@@ -355,10 +371,46 @@ class MenuBar(ttk.Frame):
                                        bootstyle = 'primary', cursor = 'hand2', width = 8, style= 'search.TButton', takefocus= False)
         self.submit_button.grid(row=0, column=1, padx=10, pady=(15, 25))
 
-        self.proceed_button = ttk.Button(self.patient_number, text= "Proceed to Assessment", command= lambda: self.master.change_frame(self, Side_Cam)
+        self.proceed_button = ttk.Button(self.patient_number, text= "Proceed to Assessment", command= lambda: [self.stop_esp(),self.master.change_frame(self, Side_Cam)]
                                          , style= 'main.TButton', takefocus= False, cursor= 'hand2', state='disabled')
         self.proceed_button.grid(row=3, column=0, padx=10, pady=(15, 40))
-    
+        self.start_esp_detect()
+        
+    def start_esp_detect(self):
+        #esp detection flag
+        if self.esp_detect == 0:
+            self.esp_detect = 1
+            process_event.clear()
+            self.queue = multiprocessing.Queue()
+            self.esp_thread = threading.Thread(target=self.update_esp_status,daemon=True)
+            if not self.esp_thread.is_alive():
+                self.esp_thread.start()
+    def update_esp_status(self):
+        self.esp_process = multiprocessing.Process(target=detect_esp,args=(self.queue,self.esp_detect),daemon=True)
+        #if process is running
+        if not self.esp_process.is_alive():
+            self.esp_process.start()
+        timer = 0
+        while True:
+            esp_status = self.queue.get()
+            print(esp_status)
+            if esp_status != "Stop":
+                self.insole_label.config(text= f"Status: {esp_status}")
+            elif self.esp_detect == 0 or esp_status == "Stop":
+                print("Killing thread")
+                break
+        print("thread killed")
+    def stop_esp(self):
+        global process_event
+        process_event.set()
+        print("stop_esp has been called")
+        self.esp_detect=0
+    def pack(self):
+        global process_event
+        print("back to menu")
+        super(MenuBar,self).pack(fill="both",expand=True)
+        self.esp_detect = 0
+        self.start_esp_detect()
     def submit_button_get_info(self):        
         conn = mysql.connector.connect(
         host = "localhost",
@@ -380,12 +432,8 @@ class MenuBar(ttk.Frame):
             self.patient_num.config(text= f"Patient Number: {self.master.current_patient_id}")
             self.patient_name.config(text= f"Patient Name: {self.master.current_patient}")
             
-            self.detect_esp()
-            #detect if esp is connected, if not disable assessment button
-            if self.esp_status == "Detected":
-                self.proceed_button.config(state = 'normal')
-            else:
-                self.proceed_button.config(state = '')
+            self.proceed_button.config(state = 'normal')
+          
         else:
             messagebox.showerror("Error", "Client ID does not exist!")
             self.master.current_patient = 'None'
@@ -400,7 +448,7 @@ class MenuBar(ttk.Frame):
 
     #Frame 4 about us
     def about_us(self):
-
+        self.stop_esp()
         self.about_us_frame = ttk.Frame(self.main_frame, borderwidth=0, bootstyle= 'light')
         self.about_us_frame.grid(row = 0, column = 0, padx = 20, pady = 20, sticky= "nsew")
 
@@ -512,7 +560,7 @@ class MenuBar(ttk.Frame):
         
     #frame 2 -----> Register Patients
     def reg_Patients(self):
-
+        self.stop_esp()
         self.regpatient_frame = ttk.Frame(self.main_frame, borderwidth=0, bootstyle= 'light')
         self.regpatient_frame.grid(row = 0, column = 0, padx = 20, pady = 20, sticky= "nsew")
 
@@ -641,7 +689,7 @@ class MenuBar(ttk.Frame):
 
     #Frame 3 ---------------------->
     def Patients_records(self):
-
+        self.stop_esp()
         self.patient_records_frame = ttk.Frame(self.main_frame, borderwidth=0, bootstyle= 'light')
         self.patient_records_frame.grid(row = 0, column = 0, padx = 20, pady = 20, sticky= "nsew")
         
@@ -1164,7 +1212,7 @@ class Account_Settings(tk.Toplevel):
                                          , style= 'main.TButton', takefocus= False, cursor= 'hand2')
         self.change_button.grid(row= 3, column=0, padx=10, pady=(10, 30))
         
-        self.destroy()
+        
 
     def change_password(self):
         old_pin = self.pin_orig_entry.get()  
@@ -1194,6 +1242,7 @@ class Account_Settings(tk.Toplevel):
         self.db_connection.commit()
         cursor.close()
         self.show_message("PIN updated successfully.")
+        self.destroy()
 
     def show_message(self, message):
         messagebox.showinfo("Message", message)
@@ -1320,10 +1369,10 @@ class Side_Cam(ttk.Frame):
                     
     def callback_esp32_sensor1(self, client, userdata, msg):
         #this is where I would save the esp data to dictionary where in the key is frame and the out is esp, example: {55: espdata}
-        self.receive_insole(msg.payload.decode('utf-8'),self.frame_number)
+        self.receive_insole(msg.payload.decode('utf-8'))
 
     def callback_esp32_sensor2(self, client, userdata, msg):
-        self.receive_insole(msg.payload.decode('utf-8'),self.frame_number)
+        self.receive_insole(msg.payload.decode('utf-8'))
         
     def callback_rpi_broadcast(self, client, userdata, msg):
         print('RPi Broadcast message:  ', str(msg.payload.decode('utf-8')))
@@ -1464,9 +1513,10 @@ class Side_Cam(ttk.Frame):
         def update_frame():
             ret, frame = self.cap.read()
             if ret:
-                self.photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
-                label.config(image=self.photo)
-                label.image = self.photo
+                get_image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                photo = ImageTk.PhotoImage(get_image)
+                label.config(image=photo)
+                label.image = photo
                 
                 if label.winfo_exists():
                     label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
@@ -1497,31 +1547,33 @@ class Side_Cam(ttk.Frame):
     def sync_timestamp(self,side_camera,side_esp):
         temp_synced_list = []
         side_camera_frame,side_camera_time = map(list,zip(*side_camera))
-        side_esp_time,side_esp_state = map(list,zip(*side_esp))
+        if side_esp:
+            side_esp_time,side_esp_state = map(list,zip(*side_esp))
 
-        for index, camera_time in enumerate(side_camera_time):
-            matched_sensor_time = self.find_closest(camera_time, side_esp_time)
-            matched_sensor_index = side_esp_time.index(matched_sensor_time)
-            closest_state = side_esp_state[matched_sensor_index]
-            if closest_state == 0:
-                closest_state = '000'
-            elif closest_state == 1:
-                closest_state = '001'
-            elif closest_state == 10:
-                closest_state = '010'
-            elif closest_state == 11:
-                closest_state = '011'
-            #100 101 and 111 are already proper
-            if abs(matched_sensor_time-camera_time) > 80: #when esp delay is greater than specified ms
-                closest_state = "unknown"
-            
-            #temp_synced_list.append((side_camera_frame[index], str(closest_state),camera_time, matched_sensor_time,abs(matched_sensor_time-camera_time)))
-            temp_synced_list.append((side_camera_frame[index], str(closest_state)))
+            for index, camera_time in enumerate(side_camera_time):
+                matched_sensor_time = self.find_closest(camera_time, side_esp_time)
+                matched_sensor_index = side_esp_time.index(matched_sensor_time)
+                closest_state = side_esp_state[matched_sensor_index]
+                if closest_state == 0:
+                    closest_state = '000'
+                elif closest_state == 1:
+                    closest_state = '001'
+                elif closest_state == 10:
+                    closest_state = '010'
+                elif closest_state == 11:
+                    closest_state = '011'
+                #100 101 and 111 are already proper
+                if abs(matched_sensor_time-camera_time) > 80: #when esp delay is greater than specified ms
+                    closest_state = "unknown"
+                
+                #temp_synced_list.append((side_camera_frame[index], str(closest_state),camera_time, matched_sensor_time,abs(matched_sensor_time-camera_time)))
+                temp_synced_list.append((side_camera_frame[index], str(closest_state)))
         return temp_synced_list
         
     def destroy(self):
         #sync timestamps
-        #print(len(self.left_frame_timestamp))
+        #print(*self.left_frame_timestamp,sep="\n")
+        #print(*self.right_frame_timestamp,sep="\n")
         #print(len(self.esp_data_left))
         if self.left_frame_timestamp: #if left side is recorded
             esp_data_left = list(map(eval,self.esp_data_left))#remove string
@@ -2225,15 +2277,15 @@ class Process_Table(ttk.Frame):
         test_data_dir = f'Data_process/{side}'
         image_files = sorted(os.listdir(test_data_dir))  # Sort the files for consistency
         
-        
         # Exclude the first 10 and last 10 frames
         #image_files = image_files[5:-5]
-        insole = "unknown"
-        if side == 'Left':
+        insole = 'temp'
+        if side == 'Left' and self.master.synced_left:
             synced_frame,synced_insole = map(list,zip(*self.master.synced_left))#format is (frame,insole)
-        if side == 'Right':
+        elif side == 'Right' and self.master.synced_right:
             synced_frame,synced_insole = map(list,zip(*self.master.synced_right))#format is (frame,insole)
-            
+        else:
+            insole = "unknown"
         for index, image_file in enumerate(image_files):
             if image_file.endswith('.jpg'):
                 frame_num = int(os.path.splitext(image_file)[0])
@@ -2249,11 +2301,11 @@ class Process_Table(ttk.Frame):
                 rom_h = self.try_me(side,frame_num,'hip')
                 rom_k = self.try_me(side,frame_num,'knee')
                 rom_a = self.try_me(side,frame_num,'ankle')
-                
-                #find index of synced list to match current frame
-                synced_index = synced_frame.index(frame_num)
-                #get insole data from index
-                insole = synced_insole[synced_index]
+                if self.master.synced_left and side =="Left" or side == "Right" and self.master.synced_right:
+                    #find index of synced list to match current frame
+                    synced_index = synced_frame.index(frame_num)
+                    #get insole data from index
+                    insole = synced_insole[synced_index]
                 
                 self.phase_frames.append({
                     'frame_name': frame_num,

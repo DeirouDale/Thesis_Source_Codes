@@ -269,8 +269,8 @@ class MenuBar(ttk.Frame):
         self.StartAssessment()
         
     def detect_esp(self):
-        response1 = os.system("ping -c 1 192.168.0.184")
-        response2 = os.system("ping -c 1 192.168.0.171")
+        response1 = os.system("ping -c 1 -w 1 192.168.0.184")
+        response2 = os.system("ping -c 1 -w 1 192.168.0.171")
         if response1 == 0 and response2 == 0:
             #detect
             self.esp_status = "Detected"
@@ -1164,7 +1164,6 @@ class Account_Settings(tk.Toplevel):
                                          , style= 'main.TButton', takefocus= False, cursor= 'hand2')
         self.change_button.grid(row= 3, column=0, padx=10, pady=(10, 30))
         
-        self.destroy()
 
     def change_password(self):
         old_pin = self.pin_orig_entry.get()  
@@ -1470,11 +1469,12 @@ class Side_Cam(ttk.Frame):
         def update_frame():
             ret, frame = self.cap.read()
             if ret:
-                photo = ImageTk.PhotoImage(image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)))
+                get_image=Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                photo = ImageTk.PhotoImage(get_image)
                 label.config(image=photo)
                 label.image = photo
-                #print(label.winfo_width())
-                #print(label.winfo_height())
+                print(label.winfo_width())
+                print(label.winfo_height())
                 if label.winfo_exists():
                     label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
@@ -1709,7 +1709,7 @@ class patient_records(tk.Toplevel):
                                             detail_label.configure(fg = 'red')
                                             print('true')	
                                 if col == 5 and value:  # Check if column is 'Image' and value is not None
-                                    image_file_path2 = f'../Data Inputs/insole_rep/{leg}/{value}.jpg'  # Use 'value' directly for image path
+                                    image_file_path2 = f'Data Inputs/insole_rep/{leg}/{value}.jpg'  # Use 'value' directly for image path
 
                                     try:
                                         # Load and resize image using PIL
@@ -2358,7 +2358,7 @@ class Process_Table(ttk.Frame):
                     print('true')
     
             # Display image
-            img2 = Image.open(f'../Data Inputs/insole_rep/{frame_info["side"]}/{insole}.jpg')
+            img2 = Image.open(f'Data Inputs/insole_rep/{frame_info["side"]}/{insole}.jpg')
             img2.thumbnail((175, 175))  # Resize image if necessary
             img2 = ImageTk.PhotoImage(img2)
             img_label2 = tk.Label(table_frame, image=img2, borderwidth=1, relief='solid')
@@ -2369,5 +2369,5 @@ class Process_Table(ttk.Frame):
 if __name__ == "__main__":
     app = refApp((1280, 700))
     app.state('normal')
-    app.attributes('-fullscreen', True) #change back to -zoomed if in rpi 
+    app.attributes('-zoomed', True) #change back to -zoomed if in rpi 
     app.mainloop()

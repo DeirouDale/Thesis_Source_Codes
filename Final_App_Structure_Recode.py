@@ -209,11 +209,14 @@ def detect_esp(queue,flag): #run every 5 seconds
             if response1 == 0 and response2 == 0:
                 #detect
                 esp_status = "Detected"
+                color_esp = "success"
             else:
                 #not fully detected
                 esp_status = "Not Detected"
+                color_esp = "danger"
                 #self.insole_label.config(text= f"Status: {self.esp_status}")
-            queue.put(esp_status)
+
+            queue.put((esp_status, color_esp))
         if flag == 0 or process_event.is_set():
             print("Killing process")
             queue.put("Stop")
@@ -238,6 +241,7 @@ class MenuBar(ttk.Frame):
         self.start_time = time.time()
         self.esp_detect = 0
         self.esp_status = None
+        self.color_esp = 'danger'
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
@@ -294,9 +298,6 @@ class MenuBar(ttk.Frame):
         self.main_frame.grid_rowconfigure(3, weight = 1)
 
         self.StartAssessment()
-        
-
-
             
     #frame 1 -----> Start Assessment of the Patients
     def StartAssessment(self):
@@ -340,7 +341,7 @@ class MenuBar(ttk.Frame):
         self.insole = ttk.Label(self.insole_syncing_frame, image = self.master.foot_icon)
         self.insole.grid(row = 1, column = 0, padx = 20, pady=(10,10))
 
-        self.insole_label = ttk.Label(self.insole_syncing_frame, text = f"Status:{self.esp_status}", bootstyle= "primary", font=('raleway', 14, 'bold'))
+        self.insole_label = ttk.Label(self.insole_syncing_frame, text = f"Status:{self.esp_status}", bootstyle= f"{self.color_esp}", font=('raleway', 14, 'bold'))
         self.insole_label.grid(row = 2, column = 0, padx = 20, pady=(20,40))
 
         #icons patient
@@ -708,6 +709,14 @@ class MenuBar(ttk.Frame):
         #search bar icon
         self.search_bar_icon = ttk.Button(self.search_bar_2_frame, text="", image= self.master.search_icon, cursor = "hand2", takefocus= False, command=self.search_patient2)
         self.search_bar_icon.pack(side = tk.LEFT, padx = 10, pady = 30)
+
+        #combo box frame
+        self.scroll_frame = ttk.Frame(self.patient_records_frame, borderwidth= 0, bootstyle = 'light')
+        self.scroll_frame.grid(row = 1 , column = 0, sticky="e", padx= 20, pady = (20, 20))
+        
+        self.values = ['Within this day', 'Last Week', 'Last 2 Weeks', 'Last Month']
+        self.filter_date = ttk.Combobox(self.scroll_frame, bootstyle = 'primary', width= 19, values= self.values, font= ('montserrat', 10, 'bold') )
+        self.filter_date.pack(side = tk.RIGHT, padx = (20, 5))
 
         #Scrollable Table
         self.scroll_bar_container = ttk.Frame(self.patient_records_frame, borderwidth = 0, bootstyle = 'secondary')

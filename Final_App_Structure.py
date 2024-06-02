@@ -23,8 +23,8 @@ import time
 
 conn = mysql.connector.connect(
     host = "localhost",
-    user= "gaitrpi",
-    password = "gait123",
+    user= "root",
+    password = "",
     database="gaitdata"
 )
 class refApp(tk.Tk):
@@ -197,8 +197,8 @@ class MenuBar(ttk.Frame):
         
         self.conn = mysql.connector.connect(
         host = "localhost",
-	    user= "gaitrpi",
-	    password = "gait123",
+	    user= "root",
+	    password = "",
 	    database="gaitdata"
         )
         
@@ -362,8 +362,8 @@ class MenuBar(ttk.Frame):
     def submit_button_get_info(self):        
         conn = mysql.connector.connect(
         host = "localhost",
-	    user= "gaitrpi",
-	    password = "gait123",
+	    user= "root",
+	    password = "",
 	    database="gaitdata"
         )
         client_id = self.patient_entry.get()
@@ -578,8 +578,8 @@ class MenuBar(ttk.Frame):
 
         conn = mysql.connector.connect(
         host = "localhost",
-	    user= "gaitrpi",
-	    password = "gait123",
+	    user= "root",
+	    password = "",
 	    database="gaitdata"
         )
 
@@ -608,8 +608,8 @@ class MenuBar(ttk.Frame):
         # Connect to the database
         conn = mysql.connector.connect(
             host = "localhost",
-	    user= "gaitrpi",
-	    password = "gait123",
+	    user= "root",
+	    password = "",
 	    database="gaitdata"
         )
 
@@ -930,8 +930,8 @@ class popupWindow_register_add(tk.Toplevel):
         if all([first_name, last_name, age, address, gender, birthdate]):
             conn = mysql.connector.connect(
                 host = "localhost",
-	        user= "gaitrpi",
-	        password = "gait123",
+	        user= "root",
+	        password = "",
 	        database="gaitdata"
             )
 
@@ -1043,8 +1043,8 @@ class popupWindow_register_modify(tk.Toplevel):
     def load_patient_data(self):
         conn = mysql.connector.connect(
             host = "localhost",
-	    user= "gaitrpi",
-            password = "gait123",
+	    user= "root",
+            password = "",
 	    database="gaitdata"
         )
 
@@ -1093,8 +1093,8 @@ class popupWindow_register_modify(tk.Toplevel):
         if all([first_name, last_name, age, birthdate, address, gender]):
             conn = mysql.connector.connect(
                 host = "localhost",
-	        user= "gaitrpi",
-	        password = "gait123",
+	        user= "root",
+	        password = "",
 	        database="gaitdata"
             )
 
@@ -1603,8 +1603,8 @@ class patient_records(tk.Toplevel):
                     # Connect to the database
                     conn = mysql.connector.connect(
                         host = "localhost",
-	                user= "gaitrpi",
-	                password = "gait123",
+	                user= "root",
+	                password = "",
 	                database="gaitdata"
                     )
                     cursor = conn.cursor()
@@ -2131,8 +2131,8 @@ class Process_Table(ttk.Frame):
     def send_data(self): #run ONLY ONCE
         conn = mysql.connector.connect(
         host = "localhost",
-	    user= "gaitrpi",
-        password = "gait123",
+	    user= "root",
+        password = "",
 	    database="gaitdata"
         )
 
@@ -2369,5 +2369,5 @@ class Process_Table(ttk.Frame):
 if __name__ == "__main__":
     app = refApp((1280, 700))
     app.state('normal')
-    app.attributes('-zoomed', True) #change back to -zoomed if in rpi 
+    app.state('zoomed')  # use 'zoomed' state here
     app.mainloop()

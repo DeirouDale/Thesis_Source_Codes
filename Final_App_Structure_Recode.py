@@ -20,6 +20,7 @@ import re
 import shutil #move files
 import paho.mqtt.client as mqtt
 import time
+from datetime import datetime, timedelta
 
 conn = mysql.connector.connect(
     host = "localhost",
@@ -691,68 +692,72 @@ class MenuBar(ttk.Frame):
     #Frame 3 ---------------------->
     def Patients_records(self):
         self.stop_esp()
-        self.patient_records_frame = ttk.Frame(self.main_frame, borderwidth=0, bootstyle= 'light')
-        self.patient_records_frame.grid(row = 0, column = 0, padx = 20, pady = 20, sticky= "nsew")
-        
-        self.patient_records_frame.grid_columnconfigure(0, weight = 1)
-        self.patient_records_frame.grid_rowconfigure(3, weight = 1)
+        self.patient_records_frame = ttk.Frame(self.main_frame, borderwidth=0, bootstyle='light')
+        self.patient_records_frame.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
 
-        self.records_label = ttk.Label(self.patient_records_frame, text = "Patient Records Section", font= ("Raleway", 18, 'bold'), bootstyle = "inverse-light")
-        self.records_label.grid(row = 0, column = 0, pady=(20,10))
+        self.patient_records_frame.grid_columnconfigure(0, weight=1)
+        self.patient_records_frame.grid_rowconfigure(3, weight=1)
 
-        self.search_bar_2_frame = ttk.Frame(self.patient_records_frame, borderwidth = 0, bootstyle = "light")
-        self.search_bar_2_frame.grid(row = 1 , column = 0, sticky="w")
+        self.records_label = ttk.Label(self.patient_records_frame, text="Patient Records Section", font=("Raleway", 18, 'bold'), bootstyle="inverse-light")
+        self.records_label.grid(row=0, column=0, pady=(20,10))
 
-        self.search_entry_2 = ttk.Entry(self.search_bar_2_frame, font= ('montserrat', 12, 'bold'), bootstyle = 'default', width = 30)
-        self.search_entry_2.pack(side = tk.LEFT, padx =(20, 10), pady = 30)
+        self.search_bar_2_frame = ttk.Frame(self.patient_records_frame, borderwidth=0, bootstyle="light")
+        self.search_bar_2_frame.grid(row=1, column=0, sticky="w")
 
-        #search bar icon
-        self.search_bar_icon = ttk.Button(self.search_bar_2_frame, text="", image= self.master.search_icon, cursor = "hand2", takefocus= False, command=self.search_patient2)
-        self.search_bar_icon.pack(side = tk.LEFT, padx = 10, pady = 30)
+        self.search_entry_2 = ttk.Entry(self.search_bar_2_frame, font=('montserrat', 12, 'bold'), bootstyle='default', width=30)
+        self.search_entry_2.pack(side=tk.LEFT, padx=(20, 10), pady=30)
 
-        #combo box frame
-        self.scroll_frame = ttk.Frame(self.patient_records_frame, borderwidth= 0, bootstyle = 'light')
-        self.scroll_frame.grid(row = 1 , column = 0, sticky="e", padx= 20, pady = (20, 20))
-        
-        self.values = ['Within this day', 'Last Week', 'Last 2 Weeks', 'Last Month']
-        self.filter_date = ttk.Combobox(self.scroll_frame, bootstyle = 'primary', width= 19, values= self.values, font= ('montserrat', 10, 'bold') )
-        self.filter_date.pack(side = tk.RIGHT, padx = (20, 5))
+        # search bar icon
+        self.search_bar_icon = ttk.Button(self.search_bar_2_frame, text="", image=self.master.search_icon, cursor="hand2", takefocus=False, command=self.search_patient2)
+        self.search_bar_icon.pack(side=tk.LEFT, padx=10, pady=30)
 
-        #Scrollable Table
-        self.scroll_bar_container = ttk.Frame(self.patient_records_frame, borderwidth = 0, bootstyle = 'secondary')
-        self.scroll_bar_container.grid(row = 2, column = 0, sticky= "nsew", padx = 20, pady = 10)
-        self.scroll_bar_container.grid_columnconfigure(0, weight = 1)
-        self.scroll_bar_container.grid_rowconfigure(0, weight = 1)
+        # Label for the time range selection
+        self.time_range_label = ttk.Label(self.search_bar_2_frame, text="Select Date", font=('Arial', 10), foreground="gray")
+        self.time_range_label.pack(side=tk.LEFT, padx=(10, 5), pady=30)
 
-        self.scrollable_frame = ScrolledFrame(self.scroll_bar_container, autohide= False, bootstyle = 'light-rounded', height = 400)
+        # Combobox for time range selection
+        self.time_range_var = tk.StringVar()
+        self.time_range_combobox = ttk.Combobox(self.search_bar_2_frame, textvariable=self.time_range_var, state="readonly", values=['All','Within this day', 'Last Week', 'Last 2 Weeks', 'Last Month', 'Last 6 Months', 'Last Year'])
+        self.time_range_combobox.pack(side=tk.LEFT, padx=5, pady=30)
+        self.time_range_combobox.bind("<<ComboboxSelected>>", self.update_patient_records)
+
+
+
+        # Scrollable Table
+        self.scroll_bar_container = ttk.Frame(self.patient_records_frame, borderwidth=0, bootstyle='secondary')
+        self.scroll_bar_container.grid(row=2, column=0, sticky="nsew", padx=20, pady=10)
+        self.scroll_bar_container.grid_columnconfigure(0, weight=1)
+        self.scroll_bar_container.grid_rowconfigure(0, weight=1)
+
+        self.scrollable_frame = ScrolledFrame(self.scroll_bar_container, autohide=False, bootstyle='light-rounded', height=400)
         self.scrollable_frame.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
 
-        query = "SELECT DISTINCT a.client_id, a.date_time, a.assessment_num, p.first_name, p.last_name FROM assessment a " \
-        "INNER JOIN patient_info p ON a.client_id = p.client_id ORDER BY a.date_time DESC LIMIT 30"
-        self.cursor.execute(query)
-        assessments = self.cursor.fetchall()
+        self.update_patient_records()
 
-        displayed_records = set()  # Set to track displayed records
-        displayed_count = 0  # Counter to track displayed records per patient
+    def get_time_range_filter(self):
+        selected_range = self.time_range_var.get()
+        now = datetime.now()
+        start_time = None
 
-        for i, (client_id, date_time, assessment_num, first_name, last_name) in enumerate(assessments):
-            if displayed_count >= 30:
-                break  # Stop displaying records once 5 records per patient have been displayed
+        if selected_range == 'All':
+            return None  # No filtering needed, return None to indicate no start time
 
-            record_key = (client_id, date_time, assessment_num, first_name, last_name)
+        if selected_range == 'Within this day':
+            start_time = now.date()  # Only use the date part
+        elif selected_range == 'Last Week':
+            start_time = (now - timedelta(days=7)).date()
+        elif selected_range == 'Last 2 Weeks':
+            start_time = (now - timedelta(days=14)).date()
+        elif selected_range == 'Last Month':
+            start_time = (now - timedelta(days=30)).date()
+        elif selected_range == 'Last 6 Months':
+            start_time = (now - timedelta(days=180)).date()
+        elif selected_range == 'Last Year':
+            start_time = (now - timedelta(days=365)).date()
 
-            # Check if this record has already been displayed
-            if record_key in displayed_records:
-                continue  # Skip displaying this duplicate record
+        print(f"Selected range: {selected_range}, Start time: {start_time}")  # Debug statement
+        return start_time
 
-            # Add record to displayed set
-            displayed_records.add(record_key)
-
-            self.display_assessment_record(i, client_id, date_time, assessment_num, first_name, last_name)
-
-            displayed_count += 1  # Increment the displayed count
-        
-        self.scrollable_frame.update()
 
         # Update the view to reflect changes
     def search_patient2(self):
@@ -763,7 +768,7 @@ class MenuBar(ttk.Frame):
             widget.destroy()
 
         if not search_text:
-            self.populate_patient_assessments()
+            self.update_patient_records()
             return
 
         try:
@@ -775,10 +780,12 @@ class MenuBar(ttk.Frame):
             self.cursor.execute(query, (search_text, search_text, search_text))
             filtered_assessments = self.cursor.fetchall()
 
+            print(f"Filtered assessments fetched: {filtered_assessments}")  # Debug statement
+
             displayed_records = set()  # Set to track displayed records
             displayed_count = 0  # Counter to track displayed records
 
-             # Iterate over the fetched filtered assessments
+            # Iterate over the fetched filtered assessments
             for i, (client_id, date_time, assessment_num, first_name, last_name) in enumerate(filtered_assessments):
                 if displayed_count >= 30:
                     break
@@ -841,29 +848,76 @@ class MenuBar(ttk.Frame):
 
     def display_assessment_record(self, row_index, client_id, date_time, assessment_num, first_name, last_name):
         # Create box frame
-                self.box_frame = ttk.Frame(self.scrollable_frame, borderwidth=0, bootstyle='info')
-                self.box_frame.grid(row=row_index, column=0, padx=15, pady=7, sticky="nsew")
+        self.box_frame = ttk.Frame(self.scrollable_frame, borderwidth=0, bootstyle='info')
+        self.box_frame.grid(row=row_index, column=0, padx=15, pady=7, sticky="nsew")
 
-                self.box_frame.grid_columnconfigure(0, weight=1)
-                self.box_frame.grid_rowconfigure(0, weight=1)
+        self.box_frame.grid_columnconfigure(0, weight=1)
+        self.box_frame.grid_rowconfigure(0, weight=1)
 
-                # Title of the assessment
-                self.assessment_title = ttk.Label(self.box_frame, text=f"Assessment {assessment_num} - {date_time} - {client_id}", font = ('Montserrat', 10, 'bold'),
-                                                bootstyle='inverse-info')
-                self.assessment_title.grid(row=0, column=0, padx=30, pady=20)
+        # Title of the assessment
+        self.assessment_title = ttk.Label(self.box_frame, text=f"Assessment {assessment_num} - {date_time} - {client_id} - {first_name} {last_name}", font=('Montserrat', 10, 'bold'),
+                                          bootstyle='inverse-info')
+        self.assessment_title.grid(row=0, column=0, padx=30, pady=20)
 
-                # Buttons view and delete
-                self.buttons_frame = ttk.Frame(self.box_frame, borderwidth=0, bootstyle='info')
-                self.buttons_frame.grid(row=0, column=2, padx=10, pady=0, sticky="w")
+        # Buttons view and delete
+        self.buttons_frame = ttk.Frame(self.box_frame, borderwidth=0, bootstyle='info')
+        self.buttons_frame.grid(row=0, column=2, padx=10, pady=0, sticky="w")
 
-                self.view_button = ttk.Button(self.buttons_frame, text="", image=self.master.eye_icon, width=80, cursor="hand2",
-                                            takefocus=False, bootstyle="info",
-                                            command=lambda id=client_id, num=assessment_num, fname=first_name, lname=last_name, dt=date_time: self.view_assessment(id, num, fname, lname,dt))
-                self.view_button.pack(side=tk.LEFT, padx=(280, 10))
-                self.delete_button = ttk.Button(self.buttons_frame, text="", image=self.master.delete_icon, width=80,
-                                                cursor="hand2", takefocus=False, bootstyle="info", command=lambda id=client_id, num=assessment_num, dt=date_time: self.delete_assessment(id, num, dt))
-                self.delete_button.pack(side=tk.LEFT, padx=30)
-                
+        self.view_button = ttk.Button(self.buttons_frame, text="", image=self.master.eye_icon, width=80, cursor="hand2",
+                                      takefocus=False, bootstyle="info",
+                                      command=lambda id=client_id, num=assessment_num, fname=first_name, lname=last_name, dt=date_time: self.view_assessment(id, num, fname, lname, dt))
+        self.view_button.pack(side=tk.LEFT, padx=(280, 10))
+        self.delete_button = ttk.Button(self.buttons_frame, text="", image=self.master.delete_icon, width=80,
+                                        cursor="hand2", takefocus=False, bootstyle="info", command=lambda id=client_id, num=assessment_num, dt=date_time: self.delete_assessment(id, num, dt))
+        self.delete_button.pack(side=tk.LEFT, padx=30)
+
+    def update_patient_records(self, event=None):
+        # Clear existing patient assessments
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        time_range_filter = self.get_time_range_filter()
+        if time_range_filter:
+            query = ("SELECT DISTINCT a.client_id, a.date_time, a.assessment_num, p.first_name, p.last_name "
+                    "FROM assessment a "
+                    "INNER JOIN patient_info p ON a.client_id = p.client_id "
+                    "WHERE DATE(a.date_time) >= %s "
+                    "ORDER BY a.date_time DESC LIMIT 30")
+            self.cursor.execute(query, (time_range_filter,))
+        else:
+            query = ("SELECT DISTINCT a.client_id, a.date_time, a.assessment_num, p.first_name, p.last_name "
+                    "FROM assessment a "
+                    "INNER JOIN patient_info p ON a.client_id = p.client_id "
+                    "ORDER BY a.date_time DESC LIMIT 30")
+            self.cursor.execute(query)
+
+        assessments = self.cursor.fetchall()
+        print(f"Assessments fetched: {assessments}")  # Debug statement
+
+        displayed_records = set()  # Set to track displayed records
+        displayed_count = 0  # Counter to track displayed records per patient
+
+        for i, (client_id, date_time, assessment_num, first_name, last_name) in enumerate(assessments):
+            if displayed_count >= 30:
+                break  # Stop displaying records once 30 records have been displayed
+
+            record_key = (client_id, date_time, assessment_num, first_name, last_name)
+
+            # Check if this record has already been displayed
+            if record_key in displayed_records:
+                continue  # Skip displaying this duplicate record
+
+            # Add record to displayed set
+            displayed_records.add(record_key)
+
+            self.display_assessment_record(i, client_id, date_time, assessment_num, first_name, last_name)
+
+            displayed_count += 1  # Increment the displayed count
+
+        self.scrollable_frame.update()
+
+
+
     def delete_assessment(self, client_id, assessment_num, date_time):
         # Construct the confirmation message with formatted strings
         confirmation_message = f"Are you sure you want to delete assessment number {assessment_num} of client {client_id} on {date_time}?"
@@ -2455,4 +2509,5 @@ if __name__ == "__main__":
     app = refApp((1280, 700))
     app.state('normal')
     app.attributes('-zoomed', True) #change back to -zoomed if in rpi 
+    app.state('zoomed')  # use 'zoomed' state here
     app.mainloop()

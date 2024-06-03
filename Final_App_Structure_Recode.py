@@ -217,10 +217,10 @@ def detect_esp(queue,flag): #run every 5 seconds
                 color_esp = "danger"
                 #self.insole_label.config(text= f"Status: {self.esp_status}")
 
-            queue.put((esp_status, color_esp))
+            queue.put((esp_status,color_esp))
         if flag == 0 or process_event.is_set():
             print("Killing process")
-            queue.put("Stop")
+            queue.put("Stop",'danger')
             break
 
 class MenuBar(ttk.Frame):
@@ -394,10 +394,11 @@ class MenuBar(ttk.Frame):
             self.esp_process.start()
         timer = 0
         while True:
-            esp_status = self.queue.get()
-            print(esp_status)
+            esp_status, self.color_esp = self.queue.get()
+            #print(self.color_esp)
+            #print(esp_status)
             if esp_status != "Stop":
-                self.insole_label.config(text= f"Status: {esp_status}")
+                self.insole_label.config(text= f"Status: {esp_status}",bootstyle= f"{self.color_esp}")
             elif self.esp_detect == 0 or esp_status == "Stop":
                 print("Killing thread")
                 break
@@ -776,8 +777,9 @@ class MenuBar(ttk.Frame):
             query = "SELECT a.client_id, a.date_time, a.assessment_num, p.first_name, p.last_name " \
                     "FROM assessment a " \
                     "INNER JOIN patient_info p ON a.client_id = p.client_id " \
-                    "WHERE a.client_id = %s OR a.date_time = %s OR assessment_num = %s ORDER BY a.date_time DESC"
-            self.cursor.execute(query, (search_text, search_text, search_text))
+                    "WHERE a.client_id = %s OR a.date_time = %s OR assessment_num = %s OR p.first_name like %s OR p.last_name like %s " \
+                    "GROUP BY a.date_time,a.assessment_num ORDER BY a.date_time DESC"
+            self.cursor.execute(query, (search_text, search_text, search_text,'%'+search_text+'%','%'+search_text+'%'))
             filtered_assessments = self.cursor.fetchall()
 
             print(f"Filtered assessments fetched: {filtered_assessments}")  # Debug statement
@@ -1057,7 +1059,7 @@ class popupWindow_register_add(tk.Toplevel):
                 conn.close()
 
                 self.clear_entry_fields()
-
+                self.destroy()
                 print("Patient added successfully!")
             except mysql.connector.Error as err:
                 print(f"Error: {err}")
@@ -2508,6 +2510,6 @@ class Process_Table(ttk.Frame):
 if __name__ == "__main__":
     app = refApp((1280, 700))
     app.state('normal')
-    app.attributes('-zoomed', True) #change back to -zoomed if in rpi 
-    app.state('zoomed')  # use 'zoomed' state here
+    app.attributes('-zoomed', True)  # change back to -zoomed if in rpi 
     app.mainloop()
+

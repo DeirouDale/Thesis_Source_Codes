@@ -595,7 +595,12 @@ class MenuBar(ttk.Frame):
         self.add_button = ttk.Button(self.add_button_frame, text= "ADD", width= 7, 
                                          style= 'main.TButton', takefocus= False, cursor= 'hand2', 
                                          command = lambda:self.master.open_popupWindow(popupWindow_register_add))
-        self.add_button.pack(side = tk.RIGHT, padx = (5, 20))
+        self.add_button.pack(side = tk.RIGHT, padx = (5, 5))
+
+        self.delete_button = ttk.Button(self.add_button_frame, text= "DELETE", width= 7, 
+                                         style= 'main.TButton', takefocus= False, cursor= 'hand2', 
+                                         command = "")
+        self.delete_button.pack(side = tk.RIGHT, padx = (5, 20))
 
         #Table Widget
         self.table_frame = ttk.Frame(self.regpatient_frame, borderwidth= 0, bootstyle = 'secondary')
@@ -868,7 +873,7 @@ class MenuBar(ttk.Frame):
         self.view_button = ttk.Button(self.buttons_frame, text="", image=self.master.eye_icon, width=80, cursor="hand2",
                                       takefocus=False, bootstyle="info",
                                       command=lambda id=client_id, num=assessment_num, fname=first_name, lname=last_name, dt=date_time: self.view_assessment(id, num, fname, lname, dt))
-        self.view_button.pack(side=tk.LEFT, padx=(280, 10))
+        self.view_button.pack(side=tk.LEFT, padx=(230, 10))
         self.delete_button = ttk.Button(self.buttons_frame, text="", image=self.master.delete_icon, width=80,
                                         cursor="hand2", takefocus=False, bootstyle="info", command=lambda id=client_id, num=assessment_num, dt=date_time: self.delete_assessment(id, num, dt))
         self.delete_button.pack(side=tk.LEFT, padx=30)
